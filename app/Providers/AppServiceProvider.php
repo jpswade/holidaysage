@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -30,6 +31,15 @@ class AppServiceProvider extends ServiceProvider
                 | Request::HEADER_X_FORWARDED_PREFIX
                 | Request::HEADER_X_FORWARDED_AWS_ELB
             );
+        }
+
+        // Caddy -> nginx -> PHP is HTTP, so the request looks like http to Laravel. useAssetOrigin forces
+        // Vite / asset() to use APP_URL; forceRootUrl + forceScheme cover route(), redirects, etc.
+        if (str_starts_with((string) config('app.url', ''), 'https://')) {
+            $root = rtrim((string) config('app.url'), '/');
+            URL::useAssetOrigin($root);
+            URL::forceRootUrl($root);
+            URL::forceScheme('https');
         }
     }
 }
