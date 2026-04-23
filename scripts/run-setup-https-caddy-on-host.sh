@@ -23,7 +23,8 @@ SCP_OPTS=(-o ConnectTimeout=10)
 [[ "$PORT" != "22" ]] && SSH_OPTS+=(-p "$PORT") && SCP_OPTS+=(-P "$PORT")
 
 scp -q "${SCP_OPTS[@]}" "$SCRIPT_DIR/setup-https-caddy-lxc.sh" "$SETUP_USER@$HOST:/tmp/setup-https-caddy-lxc.sh"
-ssh "${SSH_OPTS[@]}" "$SETUP_USER@$HOST" "${USE_SUDO}cp /tmp/setup-https-caddy-lxc.sh $SERVER_PATH/scripts/setup-https-caddy-lxc.sh"
+# Bind-mount tree may not exist yet on the host; ensure scripts/ exists before cp.
+ssh "${SSH_OPTS[@]}" "$SETUP_USER@$HOST" "${USE_SUDO}mkdir -p \"$SERVER_PATH/scripts\" && ${USE_SUDO}cp /tmp/setup-https-caddy-lxc.sh \"$SERVER_PATH/scripts/setup-https-caddy-lxc.sh\""
 ssh -tt "${SSH_OPTS[@]}" "$SETUP_USER@$HOST" "${USE_SUDO}pct exec $CTID -- bash -c 'cd ${LXC_PATH} && chmod +x scripts/setup-https-caddy-lxc.sh && ./scripts/setup-https-caddy-lxc.sh'"
 
 echo "Test: https://holidaysage.co.uk (after DNS and firewall)"
