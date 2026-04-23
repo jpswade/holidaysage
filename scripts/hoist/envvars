@@ -1,0 +1,12 @@
+# Hoist deploy path vars. Source this from hoist scripts.
+# Expects DEPLOY_BASE to be set by the caller (e.g. deploy.sh over SSH).
+if [ -n "${DEPLOY_BASE:-}" ] && [ -f "${DEPLOY_BASE}/.deploy.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "${DEPLOY_BASE}/.deploy.env"
+  set +a
+fi
+DEPLOY_STAGING_PATH="${DEPLOY_BASE:?DEPLOY_BASE not set}/staging"
+DEPLOY_CURRENT_PATH="${DEPLOY_BASE}/current"
+DEPLOY_STORAGE_PATH="${DEPLOY_BASE}/storage"
+DEPLOY_PUBLIC_PATH="${DEPLOY_BASE}/public"

@@ -1,0 +1,115 @@
+name: Test and Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: gd, intl, zlib, mbstring, xml, curl, zip, bcmath, redis
+          coverage: none
+
+      - id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - run: composer install --no-progress --no-interaction --prefer-dist
+
+      - uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ runner.os }}-node-
+
+      - run: npm ci --no-audit && npm run build
+
+      - run: |
+          cp .env.example .env
+          php artisan key:generate --no-interaction
+
+      - run: composer test
+
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create .env.deploy
+        run: |
+          cp .github/deploy-config.env .env.deploy
+          grep -q '^DEPLOY_VCS_REPO=' .env.deploy || echo "DEPLOY_VCS_REPO=git@github.com:${{ github.repository }}.git" >> .env.deploy
+          grep -q '^DEPLOY_BASE=' .env.deploy || { LXC_PATH=$(grep '^DEPLOY_LXC_PATH=' .env.deploy | cut -d= -f2-); echo "DEPLOY_BASE=$LXC_PATH" >> .env.deploy; }
+          grep -q '^DEPLOY_LXC_SSH_USER=' .env.deploy || echo "DEPLOY_LXC_SSH_USER=root" >> .env.deploy
+          grep -q '^DEPLOY_LXC_SSH_PORT=' .env.deploy || echo "DEPLOY_LXC_SSH_PORT=22" >> .env.deploy
+
+      - name: Production .env for server
+        run: |
+          if [ -n "${{ secrets.ENV_PRODUCTION }}" ]; then
+            echo "${{ secrets.ENV_PRODUCTION }}" > .env.live
+          fi
+
+      - name: Setup SSH for LXC
+        env:
+          LXC_SSH_PRIVATE_KEY: ${{ secrets.LXC_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$LXC_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy_lxc_key
+          chmod 600 ~/.ssh/deploy_lxc_key
+          DEPLOY_SSH_HOST=$(grep '^DEPLOY_LXC_IP=' .env.deploy | cut -d= -f2- | tr -d '\r' | cut -d/ -f1)
+          DEPLOY_SSH_USER=$(grep '^DEPLOY_LXC_SSH_USER=' .env.deploy | cut -d= -f2- | tr -d '\r' || echo "root")
+          DEPLOY_SSH_PORT=$(grep '^DEPLOY_LXC_SSH_PORT=' .env.deploy | cut -d= -f2- | tr -d '\r' || echo "22")
+          ssh-keyscan -H "$DEPLOY_SSH_HOST" -p "$DEPLOY_SSH_PORT" >> ~/.ssh/known_hosts 2>/dev/null || true
+          {
+            echo "Host $DEPLOY_SSH_HOST"
+            echo "  HostName $DEPLOY_SSH_HOST"
+            echo "  User $DEPLOY_SSH_USER"
+            echo "  Port $DEPLOY_SSH_PORT"
+            echo "  IdentityFile ~/.ssh/deploy_lxc_key"
+            echo "  IdentitiesOnly yes"
+          } >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+          eval "$(ssh-agent -s)"
+          if ! ssh-add ~/.ssh/deploy_lxc_key 2>/dev/null; then
+            echo "::error::LXC_SSH_PRIVATE_KEY could not be loaded."
+            exit 1
+          fi
+          if ! ssh -o BatchMode=yes -o ConnectTimeout=10 "$DEPLOY_SSH_HOST" exit 2>/dev/null; then
+            echo "::error::SSH to container failed. Add the public key for LXC_SSH_PRIVATE_KEY to the container."
+            exit 1
+          fi
+          grep -q '^LXC_SSH_PRIVATE_KEY_PATH=' .env.deploy || echo "LXC_SSH_PRIVATE_KEY_PATH=$HOME/.ssh/deploy_lxc_key" >> .env.deploy
+
+      - name: Deploy key for Git clone
+        env:
+          CONTAINER_DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          if [ -n "$CONTAINER_DEPLOY_KEY" ]; then
+            printf '%s\n' "$CONTAINER_DEPLOY_KEY" > "$RUNNER_TEMP/holidaysage-deploy"
+            chmod 600 "$RUNNER_TEMP/holidaysage-deploy"
+            echo "DEPLOY_KEY_PATH=$RUNNER_TEMP/holidaysage-deploy" >> .env.deploy
+          fi
+
+      - name: Deploy
+        run: chmod +x scripts/deploy.sh && ./scripts/deploy.sh --no-push

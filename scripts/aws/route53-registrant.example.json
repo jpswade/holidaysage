@@ -1,0 +1,15 @@
+{
+  "contact_type": "PERSON",
+  "first_name": "Given",
+  "last_name": "Family",
+  "email": "you@example.com",
+  "phone_e164": "+44.7700000000",
+  "address_line1": "Street number and name",
+  "address_line2": "",
+  "city": "Town",
+  "state": "",
+  "postcode": "AA1 1AA",
+  "country_code": "GB",
+  "uk_contact_type": "IND",
+  "uk_company_number": ""
+}

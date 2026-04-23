@@ -22,9 +22,9 @@ This project is set up for **[Laravel Herd](https://herd.laravel.com)** (not Doc
 5. Queue worker / dashboard: `php artisan horizon` (UI at `/horizon` in local environments).
 6. Front-end assets: `npm install` and `npm run dev`.
 
-Automated tests use **SQLite in memory** via `phpunit.xml`, so you do not need a MySQL database named `testing`. Run `php artisan test`.
+Automated tests use **SQLite in memory** via `phpunit.xml`, so you do not need a MySQL database named `testing`. Run `php artisan test` or `composer test`.
 
-**Production:** add a single cron entry so the Laravel scheduler runs: `* * * * * cd /path-to-your-project && php artisan schedule:run >> /dev/null 2>&1`.
+**Production (LXC):** see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for Proxmox CT layout, git hoist, GitHub Actions deploy, and optional Caddy TLS. Ensure the Laravel scheduler runs on the server (systemd units from that setup, or cron: `* * * * * cd /path-to-your-project && php artisan schedule:run >> /dev/null 2>&1`).
 
 ---
 
