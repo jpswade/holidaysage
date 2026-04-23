@@ -22,6 +22,14 @@ SSH_OPTS=(-o ConnectTimeout=10)
 SCP_OPTS=(-o ConnectTimeout=10)
 [[ "$PORT" != "22" ]] && SSH_OPTS+=(-p "$PORT") && SCP_OPTS+=(-P "$PORT")
 
+if ! ssh "${SSH_OPTS[@]}" "$SETUP_USER@$HOST" "${USE_SUDO}pct config \"$CTID\"" &>/dev/null; then
+  echo "error: Proxmox CT '$CTID' does not exist on $HOST (no lxc/${CTID}.conf)." >&2
+  echo "  Create the container first, e.g. ./scripts/run-setup-lxc-on-host.sh (uses DEPLOY_LXC_CTID from .env.deploy)," >&2
+  echo "  or set DEPLOY_LXC_CTID in .env.deploy to an existing VMID. CTs on this host:" >&2
+  ssh "${SSH_OPTS[@]}" "$SETUP_USER@$HOST" "${USE_SUDO}pct list" >&2 || true
+  exit 1
+fi
+
 scp -q "${SCP_OPTS[@]}" "$SCRIPT_DIR/setup-https-caddy-lxc.sh" "$SETUP_USER@$HOST:/tmp/setup-https-caddy-lxc.sh"
 # Bind-mount tree may not exist yet on the host; ensure scripts/ exists before cp.
 # mkdir as SSH user (avoids root-owned dirs under /home/admin); cp uses sudo when Proxmox user is not root.

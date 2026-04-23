@@ -80,6 +80,8 @@ Set `DEPLOY_NGINX_SITE` in `.env.deploy` if you changed the nginx site filename 
 
 ## HTTPS (Caddy)
 
+The **Proxmox CT must exist** (`DEPLOY_LXC_CTID` in `.env.deploy` must match `sudo pct list` on the host). If you see `lxc/<id>.conf does not exist`, run [run-setup-lxc-on-host.sh](../scripts/run-setup-lxc-on-host.sh) first or fix the VMID.
+
 After **DNS for `holidaysage.co.uk`** points at the host/CT and ports **80/443** are open:
 
 ```bash
