@@ -12,6 +12,34 @@ Production follows the same **LXC + git hoist** model as [DomainSage](https://gi
 
 `DEPLOY_BASE` defaults to `DEPLOY_LXC_PATH` (e.g. `/var/www/holidaysage`).
 
+## DNS and public IPv4 (same pattern as DomainSage)
+
+If **`ping holidaysage.co.uk`** reports **unknown host**, the name is not resolving yet. Typical causes:
+
+1. The **domain is not registered**, or the **registrar nameservers** do not point at where you manage DNS (Route 53 hosted zone or Cloudflare).
+2. DNS is managed somewhere, but there is **no `A` record** (and usually **`www`**) for the **public IPv4** that reaches your CT.
+
+**Public IP in deploy config (Phurix / `dawn.phurix.com`):** like DomainSage, set **`DEPLOY_LXC_IP`** to the CT’s **routable** address with mask (e.g. `87.117.209.197/26`), **`DEPLOY_LXC_GW`**, **`DEPLOY_LXC_BRIDGE=vmbr1`**, and Phurix **nameservers** in [`.env.deploy.example`](../.env.deploy.example). Mirror the same values in [`.github/deploy-config.env`](../.github/deploy-config.env) so **GitHub Actions** can SSH to the CT. **Confirm the IPv4 in Proxmox** before relying on it (the example `.197` is only plausible if that host is free on the same `/26` as DomainSage).
+
+**Point the hostname at that IPv4:**
+
+- **Route 53 (hosted zone already exists for `holidaysage.co.uk`):**
+
+  ```bash
+  export DNS_A_TARGET_IPV4=87.117.209.197   # same host address as DEPLOY_LXC_IP, without /mask
+  chmod +x scripts/aws/route53-upsert-a-records.sh
+  DRY_RUN=1 ./scripts/aws/route53-upsert-a-records.sh
+  ./scripts/aws/route53-upsert-a-records.sh
+  ```
+
+  Requires `jq`, AWS credentials (`scripts/aws/register-domain.env`), and permission on `route53:ChangeResourceRecordSets`.
+
+- **Cloudflare (or another DNS UI):** create **`A`** for `@` and **`A`** for `www` to that same public IPv4 (or `CNAME` **www** → apex, if you prefer).
+
+After delegation and records propagate, **`ping holidaysage.co.uk`** should resolve (ICMP may still be blocked by a firewall; **`dig holidaysage.co.uk A`** is a good check).
+
+**Push Actions secrets from your laptop:** [scripts/set-github-action-secrets.sh](../scripts/set-github-action-secrets.sh) (same idea as DomainSage).
+
 ## One-time: LXC stack (Proxmox)
 
 1. Copy [`.env.deploy.example`](../.env.deploy.example) to `.env.deploy` and set `DEPLOY_LXC_*` (CT id, path, **static IP with CIDR**, gateway, bridge, storage), `DEPLOY_SERVER_*` (Proxmox or jump host: user, port, path to the bind-mount directory on the host), and `DEPLOY_VCS_REPO=git@github.com:jpswade/holidaysage.git`. Use the same network pattern as your other LXCs (e.g. DomainSage / Road on `dawn.phurix.com`).
@@ -71,6 +99,8 @@ Workflow: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml). Non
 | `LXC_SSH_PRIVATE_KEY` | SSH private key; matching **public** key on the container `authorized_keys`. |
 | `ENV_PRODUCTION` | Full production `.env` (multi-line), copied to `.env.live` before deploy. |
 | `DEPLOY_KEY` (optional) | Private key for `git clone` inside the CT if different from LXC SSH key. |
+
+**CLI:** `./scripts/set-github-action-secrets.sh` (uses `~/.ssh/holidaysage-deploy` and `.env.live` by default).
 
 ## Register `holidaysage.co.uk` (AWS Route 53)
 
