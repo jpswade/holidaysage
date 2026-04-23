@@ -64,7 +64,7 @@ After delegation and records propagate, **`ping holidaysage.co.uk`** should reso
 
    This installs nginx (site `holidaysage`), MariaDB, **Redis**, PHP extensions including `php8.3-redis`, Node 20, systemd units **`holidaysage-horizon`** and **`holidaysage-scheduler`**.
 
-5. Edit `.env` on the server: `APP_URL`, `APP_KEY`, `DB_*`, `QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`, `REDIS_HOST=127.0.0.1`. For TLS termination in front of nginx, set `TRUSTED_PROXY_ALL=true` (see [AppServiceProvider](../app/Providers/AppServiceProvider.php)).
+5. Edit `.env` on the server: `APP_URL`, `APP_KEY`, `DB_*`, `QUEUE_CONNECTION=redis`, `CACHE_STORE=redis`, `REDIS_HOST=127.0.0.1`. For TLS termination in front of nginx, set `TRUSTED_PROXY_ALL=true` (see [AppServiceProvider](../app/Providers/AppServiceProvider.php)). On Ubuntu MariaDB, **`root` usually uses `unix_socket` auth** (PDO error **1698** from PHP); use a dedicated **`DB_USERNAME`** with a password and `GRANT` on your database instead of `root`.
 
 ## Deploy from your laptop
 
