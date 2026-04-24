@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\HolidayScorer;
+use App\Services\Scoring\DefaultHolidayScorer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -13,7 +15,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->mergeConfigFrom(
+            __DIR__.'/../../config/holidaysage.php',
+            'holidaysage'
+        );
+
+        $this->app->bind(
+            HolidayScorer::class,
+            DefaultHolidayScorer::class
+        );
     }
 
     /**
