@@ -41,8 +41,12 @@ class Jet2DetailPageParserTest extends TestCase
 {"@type":"Hotel","address":{"addressCountry":"Spain"}}
 </script>
 <div>official rating: 4 star</div>
-<p>Sports & Leisure</p>
-<ul><li>Gym</li><li>Aerobics</li></ul>
+<div class="accordion">
+  <h3 class="accordion__heading">Sports &amp; Leisure</h3>
+  <div class="accordion__content">
+    <ul class="accordion__list"><li>Gym</li><li>Aerobics</li></ul>
+  </div>
+</div>
 <p class="grid-item__heading">Local beer</p><p class="grid-item__text">£2.50</p>
 <p class="grid-item__heading">Three-course meal for two</p><p class="grid-item__text">£42.10</p>
 <div class="overview__board-type-title">Half Board</div>

@@ -9,6 +9,30 @@ use Illuminate\Support\Str;
 class Jet2DetailPageParser implements ProviderDetailPageParser
 {
     use ExtractsEmbeddedJson;
+    private const BOARD_LABELS = [
+        'AI' => 'All Inclusive',
+        'FB' => 'Full Board',
+        'HB' => 'Half Board',
+        'BB' => 'Bed & Breakfast',
+        'SC' => 'Self Catering',
+        'RO' => 'Room Only',
+    ];
+
+    /** @var array<string, array{lat: float, lng: float}> */
+    private const AIRPORT_COORDINATES = [
+        'AGP' => ['lat' => 36.6749, 'lng' => -4.4991],
+        'MAH' => ['lat' => 39.8626, 'lng' => 4.2186],
+        'PMI' => ['lat' => 39.5517, 'lng' => 2.7388],
+        'SPU' => ['lat' => 43.5389, 'lng' => 16.2980],
+        'ALC' => ['lat' => 38.2822, 'lng' => -0.5582],
+        'SKG' => ['lat' => 40.5197, 'lng' => 22.9709],
+        'IBZ' => ['lat' => 38.8729, 'lng' => 1.3731],
+        'TFS' => ['lat' => 28.0445, 'lng' => -16.5725],
+        'RHO' => ['lat' => 36.4054, 'lng' => 28.0862],
+        'ACE' => ['lat' => 28.9455, 'lng' => -13.6052],
+        'AYT' => ['lat' => 36.8993, 'lng' => 30.8014],
+        'FAO' => ['lat' => 37.0144, 'lng' => -7.9659],
+    ];
 
     /**
      * @param  array<string,mixed>  $candidate
@@ -34,6 +58,15 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         }
         if (is_numeric($property['mapLocation']['longitude'] ?? null)) {
             $hotel['longitude'] = (float) $property['mapLocation']['longitude'];
+        }
+        $airportDistance = $this->deriveAirportDistanceKm(
+            strtoupper((string) ($candidate['airport_code'] ?? '')),
+            isset($hotel['latitude']) ? (float) $hotel['latitude'] : null,
+            isset($hotel['longitude']) ? (float) $hotel['longitude'] : null,
+            is_numeric($candidate['raw_attributes']['distance_to_airport_km'] ?? null) ? (float) $candidate['raw_attributes']['distance_to_airport_km'] : null
+        );
+        if ($airportDistance !== null) {
+            $hotel['distance_to_airport_km'] = $airportDistance;
         }
         if (is_numeric($property['rating'] ?? null)) {
             $hotel['star_rating'] = (int) round((float) $property['rating']);
@@ -114,6 +147,9 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
             if (preg_match('/(\d+)\s*m\s+from\s+.*beach/i', $item, $m)) {
                 $hotel['distance_to_beach_meters'] = (int) $m[1];
             }
+        }
+        if (($hotel['has_lift'] ?? null) === false && (($hotel['floors_count'] ?? null) !== null) && (int) $hotel['floors_count'] >= 3) {
+            $hotel['accessibility_issues'] = $this->appendIssue($hotel['accessibility_issues'] ?? null, 'multi_storey_no_lift');
         }
 
         if (is_array($property['keySellingPoints'] ?? null)) {
@@ -265,6 +301,13 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         if ($sportsCount !== null) {
             $hotel['sports_leisure_count'] = $sportsCount;
         }
+        $restaurantBarCounts = $this->extractRestaurantAndBarCounts($html);
+        if (($hotel['restaurants_count'] ?? null) === null && $restaurantBarCounts['restaurants'] !== null) {
+            $hotel['restaurants_count'] = $restaurantBarCounts['restaurants'];
+        }
+        if (($hotel['bars_count'] ?? null) === null && $restaurantBarCounts['bars'] !== null) {
+            $hotel['bars_count'] = $restaurantBarCounts['bars'];
+        }
 
         $localInfo = $this->extractLocalInfo($html);
         $localBeerPrice = $this->extractCurrencyValue((string) ($localInfo['local_beer'] ?? ''), 'local beer');
@@ -323,21 +366,130 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
 
     private function extractSportsLeisureCount(string $html): ?int
     {
-        if (! preg_match('/sports\s*&\s*leisure.*?<ul[^>]*>(.*?)<\/ul>/is', $html, $m)) {
-            return null;
-        }
-        if (! preg_match_all('/<li\b[^>]*>/i', $m[1], $items)) {
-            return null;
+        $sections = $this->extractAccordionSections($html);
+        foreach ($sections as $title => $items) {
+            $title = Str::lower($title);
+            if (! str_contains($title, 'sports') || ! str_contains($title, 'leisure')) {
+                continue;
+            }
+            $count = count(array_filter($items, fn ($item) => trim($item) !== ''));
+
+            return $count > 0 ? $count : null;
         }
 
-        return count($items[0]);
+        if (! preg_match_all('/<div[^>]*class="accordion"[^>]*>(.*?)<\/div>\s*<\/div>/is', $html, $blocks)) {
+            return null;
+        }
+        foreach ($blocks[1] as $block) {
+            $title = Str::lower(strip_tags((string) $block));
+            if (! str_contains($title, 'sports') || ! str_contains($title, 'leisure')) {
+                continue;
+            }
+            if (preg_match('/<ul[^>]*class="accordion__list"[^>]*>(.*?)<\/ul>/is', $block, $list)
+                && preg_match_all('/<li\b[^>]*>(.*?)<\/li>/is', $list[1], $items)) {
+                $count = 0;
+                foreach ($items[1] as $item) {
+                    if (trim(strip_tags((string) $item)) !== '') {
+                        $count++;
+                    }
+                }
+
+                return $count > 0 ? $count : null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{restaurants: ?int, bars: ?int}
+     */
+    private function extractRestaurantAndBarCounts(string $html): array
+    {
+        $sections = $this->extractAccordionSections($html);
+        foreach ($sections as $title => $items) {
+            $title = Str::lower($title);
+            if (! str_contains($title, 'restaurant') || ! str_contains($title, 'bar')) {
+                continue;
+            }
+            $restaurants = 0;
+            $bars = 0;
+            foreach ($items as $item) {
+                $item = Str::lower(trim($item));
+                if ($item === '') {
+                    continue;
+                }
+                if (str_contains($item, 'bar') || str_contains($item, 'lounge')) {
+                    $bars++;
+                } else {
+                    $restaurants++;
+                }
+            }
+
+            return [
+                'restaurants' => $restaurants > 0 ? $restaurants : null,
+                'bars' => $bars > 0 ? $bars : null,
+            ];
+        }
+
+        if (! preg_match_all('/<div[^>]*class="accordion"[^>]*>(.*?)<\/div>\s*<\/div>/is', $html, $blocks)) {
+            return ['restaurants' => null, 'bars' => null];
+        }
+        foreach ($blocks[1] as $block) {
+            $title = Str::lower(strip_tags((string) $block));
+            if (! str_contains($title, 'restaurant') || ! str_contains($title, 'bar')) {
+                continue;
+            }
+            if (! preg_match('/<ul[^>]*class="accordion__list"[^>]*>(.*?)<\/ul>/is', $block, $list)
+                || ! preg_match_all('/<li\b[^>]*>(.*?)<\/li>/is', $list[1], $items)) {
+                continue;
+            }
+            $restaurants = 0;
+            $bars = 0;
+            foreach ($items[1] as $itemHtml) {
+                $item = Str::lower(trim(strip_tags((string) $itemHtml)));
+                if ($item === '') {
+                    continue;
+                }
+                if (str_contains($item, 'bar') || str_contains($item, 'lounge')) {
+                    $bars++;
+                    continue;
+                }
+                $restaurants++;
+            }
+
+            return [
+                'restaurants' => $restaurants > 0 ? $restaurants : null,
+                'bars' => $bars > 0 ? $bars : null,
+            ];
+        }
+
+        return ['restaurants' => null, 'bars' => null];
     }
 
     private function extractRecommendedBoard(string $html, array $accommodationOptions): ?string
     {
+        $codes = [];
         foreach ($accommodationOptions as $opt) {
-            if (is_array($opt) && is_string($opt['board'] ?? null) && trim($opt['board']) !== '') {
-                return trim((string) $opt['board']);
+            if (! is_array($opt)) {
+                continue;
+            }
+            if (is_string($opt['boardId'] ?? null)) {
+                $code = $this->normaliseBoardCode((string) $opt['boardId']);
+                if ($code !== null) {
+                    $codes[] = $code;
+                }
+            }
+            if (is_string($opt['board'] ?? null) && trim((string) $opt['board']) !== '') {
+                $code = $this->normaliseBoardCode((string) $opt['board']);
+                if ($code !== null) {
+                    $codes[] = $code;
+                }
+            }
+        }
+        foreach (array_keys(self::BOARD_LABELS) as $code) {
+            if (in_array($code, $codes, true)) {
+                return self::BOARD_LABELS[$code];
             }
         }
 
@@ -348,6 +500,69 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         }
 
         return null;
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private function extractAccordionSections(string $html): array
+    {
+        if (trim($html) === '') {
+            return [];
+        }
+        $doc = new \DOMDocument;
+        libxml_use_internal_errors(true);
+        $loaded = $doc->loadHTML($html);
+        libxml_clear_errors();
+        if (! $loaded) {
+            return [];
+        }
+        $xpath = new \DOMXPath($doc);
+        $nodes = $xpath->query('//div[contains(concat(" ", normalize-space(@class), " "), " accordion ")]');
+        if ($nodes === false) {
+            return [];
+        }
+        $sections = [];
+        foreach ($nodes as $node) {
+            $heading = $xpath->query('.//h3[contains(concat(" ", normalize-space(@class), " "), " accordion__heading ")]', $node);
+            if ($heading === false || $heading->length === 0) {
+                continue;
+            }
+            $title = trim((string) $heading->item(0)?->textContent);
+            if ($title === '') {
+                continue;
+            }
+            $items = [];
+            $lis = $xpath->query('.//ul[contains(concat(" ", normalize-space(@class), " "), " accordion__list ")]/li', $node);
+            if ($lis !== false) {
+                foreach ($lis as $li) {
+                    $text = trim((string) $li->textContent);
+                    if ($text !== '') {
+                        $items[] = preg_replace('/\s+/', ' ', $text) ?? $text;
+                    }
+                }
+            }
+            $sections[$title] = $items;
+        }
+
+        return $sections;
+    }
+
+    private function normaliseBoardCode(string $value): ?string
+    {
+        $v = Str::upper(trim($value));
+        if ($v === '') {
+            return null;
+        }
+        return match (true) {
+            str_contains($v, 'ALL') || $v === 'AI' || $v === 'AL' => 'AI',
+            str_contains($v, 'FULL') || $v === 'FB' => 'FB',
+            str_contains($v, 'HALF') || $v === 'HB' => 'HB',
+            str_contains($v, 'BREAKFAST') || $v === 'BB' => 'BB',
+            str_contains($v, 'SELF') || $v === 'SC' => 'SC',
+            str_contains($v, 'ROOM ONLY') || $v === 'RO' => 'RO',
+            default => null,
+        };
     }
 
     private function extractFlightWindow(mixed $raw): ?string
@@ -439,5 +654,30 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         }
 
         return implode(',', array_values(array_filter($issues, fn ($item) => $item !== '')));
+    }
+
+    private function deriveAirportDistanceKm(string $airportCode, ?float $hotelLat, ?float $hotelLng, ?float $fallback): ?float
+    {
+        if ($hotelLat === null || $hotelLng === null) {
+            return $fallback;
+        }
+        if (! isset(self::AIRPORT_COORDINATES[$airportCode])) {
+            return $fallback;
+        }
+        $airport = self::AIRPORT_COORDINATES[$airportCode];
+        $km = $this->haversineKm($hotelLat, $hotelLng, $airport['lat'], $airport['lng']);
+
+        return round($km, 2);
+    }
+
+    private function haversineKm(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $r = 6371.0;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return $r * $c;
     }
 }

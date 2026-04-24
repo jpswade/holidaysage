@@ -187,6 +187,7 @@ class Jet2LiveImporter implements ProviderHttpImporter
      */
     private function candidatesFromApiJson(array $data, SavedHolidaySearch $search, ProviderSource $provider, string $url): array
     {
+        $flightById = $this->indexFlightsById($data);
         $rows = [];
         foreach (($data['results'] ?? []) as $item) {
             if (! is_array($item)) {
@@ -199,9 +200,12 @@ class Jet2LiveImporter implements ProviderHttpImporter
                 continue;
             }
 
+            $selectedFlightId = is_numeric($item['selectedFlightId'] ?? null) ? (int) $item['selectedFlightId'] : null;
             $price = null;
+            $pricePerPerson = null;
             if (isset($item['selectedPrice']) && is_array($item['selectedPrice'])) {
                 $price = $item['selectedPrice']['totalPrice'] ?? null;
+                $pricePerPerson = $item['selectedPrice']['pricePerPerson'] ?? null;
             }
             if ($price === null && isset($item['priceFrom'])) {
                 $price = $item['priceFrom'];
@@ -218,6 +222,11 @@ class Jet2LiveImporter implements ProviderHttpImporter
                         if (! is_array($po)) {
                             continue;
                         }
+                        if ($selectedFlightId !== null && is_numeric($po['flightId'] ?? null) && (int) $po['flightId'] === $selectedFlightId) {
+                            $price = $po['totalPrice'] ?? $po['basePrice'] ?? $price;
+                            $pricePerPerson = $po['pricePerPerson'] ?? $pricePerPerson;
+                            break 2;
+                        }
                         $candidatePrice = $po['totalPrice'] ?? $po['basePrice'] ?? null;
                         if (is_numeric($candidatePrice)) {
                             $candidateFloat = (float) $candidatePrice;
@@ -233,6 +242,10 @@ class Jet2LiveImporter implements ProviderHttpImporter
             $nights = max(1, (int) ($item['duration'] ?? $search->duration_min_nights));
             $ret = Carbon::parse($dep)->addDays($nights)->toDateString();
             $slug = Str::slug($name) ?: Str::random(12);
+            $flightInfo = $selectedFlightId !== null ? ($flightById[$selectedFlightId] ?? null) : null;
+            $airportTo = is_array($flightInfo) ? ($flightInfo['arrival_airport_code'] ?? null) : null;
+            $outboundFlight = is_array($flightInfo) ? ($flightInfo['outbound_flight'] ?? null) : null;
+            $inboundFlight = is_array($flightInfo) ? ($flightInfo['inbound_flight'] ?? null) : null;
 
             $rows[] = [
                 'provider_option_id' => 'jet2-'.substr(sha1($itemUrl.'|'.$name), 0, 12),
@@ -246,7 +259,7 @@ class Jet2LiveImporter implements ProviderHttpImporter
                     $item['destinationCountry'] ?? $property['country'] ?? null,
                     $itemUrl
                 ),
-                'airport_code' => $search->departure_airport_code,
+                'airport_code' => is_string($airportTo) && $airportTo !== '' ? $airportTo : $search->departure_airport_code,
                 'departure_date' => $dep,
                 'return_date' => $ret,
                 'nights' => $nights,
@@ -255,7 +268,7 @@ class Jet2LiveImporter implements ProviderHttpImporter
                 'infants' => (int) $search->infants,
                 'board_type' => null,
                 'price_total' => is_numeric($price) ? (float) $price : 0.0,
-                'price_per_person' => null,
+                'price_per_person' => is_numeric($pricePerPerson) ? (float) $pricePerPerson : null,
                 'currency' => 'GBP',
                 'flight_outbound_duration_minutes' => null,
                 'flight_inbound_duration_minutes' => null,
@@ -279,13 +292,58 @@ class Jet2LiveImporter implements ProviderHttpImporter
                     'distance_to_airport_km' => is_numeric($item['distanceToAirportKm'] ?? null)
                         ? (float) $item['distanceToAirportKm']
                         : (is_numeric($property['distanceToAirportKm'] ?? null) ? (float) $property['distanceToAirportKm'] : null),
-                    'outbound_flight' => is_string($item['outboundFlight'] ?? null) ? $item['outboundFlight'] : null,
-                    'inbound_flight' => is_string($item['inboundFlight'] ?? null) ? $item['inboundFlight'] : null,
+                    'outbound_flight' => is_string($outboundFlight) ? $outboundFlight : (is_string($item['outboundFlight'] ?? null) ? $item['outboundFlight'] : null),
+                    'inbound_flight' => is_string($inboundFlight) ? $inboundFlight : (is_string($item['inboundFlight'] ?? null) ? $item['inboundFlight'] : null),
                 ],
             ];
         }
 
         return $rows;
+    }
+
+    /**
+     * @param  array<string,mixed>  $data
+     * @return array<int, array{arrival_airport_code: string, outbound_flight: string, inbound_flight: string}>
+     */
+    private function indexFlightsById(array $data): array
+    {
+        $out = [];
+        foreach (($data['flights'] ?? []) as $flight) {
+            if (! is_array($flight) || ! is_numeric($flight['flightId'] ?? null)) {
+                continue;
+            }
+            $flightId = (int) $flight['flightId'];
+            $outbound = is_array($flight['outbound'] ?? null) ? $flight['outbound'] : [];
+            $inbound = is_array($flight['inbound'] ?? null) ? $flight['inbound'] : [];
+            $out[$flightId] = [
+                'arrival_airport_code' => strtoupper((string) ($outbound['arrivalAirportCode'] ?? '')),
+                'outbound_flight' => $this->formatFlightWindow(
+                    (string) ($outbound['departureDateTimeLocal'] ?? ''),
+                    (string) ($outbound['arrivalDateTimeLocal'] ?? '')
+                ) ?? '',
+                'inbound_flight' => $this->formatFlightWindow(
+                    (string) ($inbound['departureDateTimeLocal'] ?? ''),
+                    (string) ($inbound['arrivalDateTimeLocal'] ?? '')
+                ) ?? '',
+            ];
+        }
+
+        return $out;
+    }
+
+    private function formatFlightWindow(string $departureIso, string $arrivalIso): ?string
+    {
+        try {
+            if ($departureIso === '' || $arrivalIso === '') {
+                return null;
+            }
+            $departure = Carbon::parse($departureIso)->format('H:i');
+            $arrival = Carbon::parse($arrivalIso)->format('H:i');
+
+            return $departure.'-'.$arrival;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
