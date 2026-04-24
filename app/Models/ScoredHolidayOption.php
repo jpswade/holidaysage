@@ -10,7 +10,7 @@ class ScoredHolidayOption extends Model
     protected $fillable = [
         'saved_holiday_search_id',
         'saved_holiday_search_run_id',
-        'holiday_option_id',
+        'holiday_package_id',
         'overall_score',
         'travel_score',
         'value_score',
@@ -49,8 +49,8 @@ class ScoredHolidayOption extends Model
         return $this->belongsTo(SavedHolidaySearchRun::class, 'saved_holiday_search_run_id');
     }
 
-    public function holidayOption(): BelongsTo
+    public function holidayPackage(): BelongsTo
     {
-        return $this->belongsTo(HolidayOption::class);
+        return $this->belongsTo(HolidayPackage::class);
     }
 }

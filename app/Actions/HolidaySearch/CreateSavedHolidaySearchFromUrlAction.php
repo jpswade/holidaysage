@@ -24,19 +24,21 @@ class CreateSavedHolidaySearchFromUrlAction
         $extracted = $parser->parse($url);
         $provider = $this->providerResolver->forUrl($url);
 
-        $attributes = $this->mergeWithDefaults($url, $provider, $extracted);
+        $search = SavedHolidaySearch::query()
+            ->where('provider_import_url', $url)
+            ->when($userId !== null, fn ($q) => $q->where('user_id', $userId), fn ($q) => $q->whereNull('user_id'))
+            ->first() ?? new SavedHolidaySearch;
 
-        $search = new SavedHolidaySearch;
+        $attributes = $this->mergeWithDefaults($url, $provider, $extracted, $search->exists);
         $search->forceFill($attributes);
-        if ($userId !== null) {
-            $search->user_id = $userId;
-        }
+        $search->user_id = $userId;
         $search->save();
 
-        HolidaySearchImportMapping::query()->create([
+        HolidaySearchImportMapping::query()->updateOrCreate([
             'saved_holiday_search_id' => $search->id,
             'provider_source_id' => $provider->id,
             'original_url' => $url,
+        ], [
             'extracted_criteria' => $extracted,
         ]);
 
@@ -47,7 +49,7 @@ class CreateSavedHolidaySearchFromUrlAction
      * @param  array<string, mixed>  $extracted
      * @return array<string, mixed>
      */
-    private function mergeWithDefaults(string $url, ProviderSource $provider, array $extracted): array
+    private function mergeWithDefaults(string $url, ProviderSource $provider, array $extracted, bool $isUpdate): array
     {
         $host = (string) parse_url($url, PHP_URL_HOST);
         $name = 'Import — '.$provider->name.($host ? ' ('.$host.')' : '');
@@ -68,7 +70,7 @@ class CreateSavedHolidaySearchFromUrlAction
 
         return array_filter([
             'name' => $name,
-            'slug' => $this->uniqueSlug($baseSlug),
+            'slug' => $isUpdate ? null : $this->uniqueSlug($baseSlug),
             'provider_import_url' => $url,
             'departure_airport_code' => $extracted['departure_airport_code'] ?? 'MAN',
             'departure_airport_name' => $extracted['departure_airport_name'] ?? null,

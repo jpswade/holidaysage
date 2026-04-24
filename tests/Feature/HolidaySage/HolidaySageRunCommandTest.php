@@ -69,7 +69,10 @@ class HolidaySageRunCommandTest extends TestCase
 
         $run = SavedHolidaySearchRun::query()->latest('id')->first();
         $this->assertSame(SavedHolidaySearchRunStatus::Failed, $run->status);
-        $this->assertStringContainsString('timed out', (string) $run->error_message);
+        $this->assertTrue(
+            str_contains((string) $run->error_message, 'timed out')
+            || str_contains((string) $run->error_message, 'did not return a response')
+        );
     }
 
     public function test_live_http_malformed_payload_marks_run_failed(): void

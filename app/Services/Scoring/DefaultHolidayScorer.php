@@ -4,13 +4,14 @@ namespace App\Services\Scoring;
 
 use App\Contracts\HolidayScorer;
 use App\Data\ScoreBreakdown;
-use App\Models\HolidayOption;
+use App\Models\HolidayPackage;
 use App\Models\SavedHolidaySearch;
 
 class DefaultHolidayScorer implements HolidayScorer
 {
-    public function score(SavedHolidaySearch $search, HolidayOption $option): ScoreBreakdown
+    public function score(SavedHolidaySearch $search, HolidayPackage $option): ScoreBreakdown
     {
+        $hotel = $option->hotel;
         $disqual = [];
         $warnings = [];
         if ($this->nightsOutOfRange($search, $option)) {
@@ -27,9 +28,9 @@ class DefaultHolidayScorer implements HolidayScorer
         if ($option->transfer_minutes && $option->transfer_minutes > 90) {
             $warnings[] = 'Transfer may feel long in peak season';
         }
-        if ($option->is_family_friendly && $search->children > 0) {
+        if ($hotel?->is_family_friendly && $search->children > 0) {
             $warnings = array_merge($warnings, []);
-        } elseif ($search->children > 0 && ! $option->is_family_friendly) {
+        } elseif ($search->children > 0 && ! $hotel?->is_family_friendly) {
             $warnings[] = 'Not marked as family friendly';
         }
 
@@ -73,13 +74,13 @@ class DefaultHolidayScorer implements HolidayScorer
         );
     }
 
-    private function nightsOutOfRange(SavedHolidaySearch $search, HolidayOption $option): bool
+    private function nightsOutOfRange(SavedHolidaySearch $search, HolidayPackage $option): bool
     {
         return $option->nights < $search->duration_min_nights
             || $option->nights > $search->duration_max_nights;
     }
 
-    private function isBudgetBreak(SavedHolidaySearch $search, HolidayOption $option): bool
+    private function isBudgetBreak(SavedHolidaySearch $search, HolidayPackage $option): bool
     {
         if ($search->budget_total === null) {
             return false;
@@ -88,7 +89,7 @@ class DefaultHolidayScorer implements HolidayScorer
         return (float) $option->price_total > (float) $search->budget_total * 1.2;
     }
 
-    private function isTransferBreak(SavedHolidaySearch $search, HolidayOption $option): bool
+    private function isTransferBreak(SavedHolidaySearch $search, HolidayPackage $option): bool
     {
         if ($search->max_transfer_minutes === null || $option->transfer_minutes === null) {
             return false;
@@ -97,7 +98,7 @@ class DefaultHolidayScorer implements HolidayScorer
         return $option->transfer_minutes > (int) $search->max_transfer_minutes;
     }
 
-    private function dimTravel(SavedHolidaySearch $search, HolidayOption $option): float
+    private function dimTravel(SavedHolidaySearch $search, HolidayPackage $option): float
     {
         $s = 7.0;
         if (strtoupper($option->airport_code) === strtoupper($search->departure_airport_code)) {
@@ -126,7 +127,7 @@ class DefaultHolidayScorer implements HolidayScorer
         return (float) max(0, min(10, $s));
     }
 
-    private function dimValue(SavedHolidaySearch $search, HolidayOption $option): float
+    private function dimValue(SavedHolidaySearch $search, HolidayPackage $option): float
     {
         $s = 5.0;
         if ($search->budget_total) {
@@ -138,8 +139,8 @@ class DefaultHolidayScorer implements HolidayScorer
                 $s -= min(3.0, ($p - $b) / max($b, 1) * 2);
             }
         }
-        if ($option->review_score) {
-            $s += (float) $option->review_score;
+        if ($option->hotel?->review_score) {
+            $s += (float) $option->hotel->review_score;
         } else {
             $s += 0.3;
         }
@@ -147,7 +148,7 @@ class DefaultHolidayScorer implements HolidayScorer
         return (float) max(0, min(10, $s));
     }
 
-    private function dimFamily(SavedHolidaySearch $search, HolidayOption $option): float
+    private function dimFamily(SavedHolidaySearch $search, HolidayPackage $option): float
     {
         $s = 5.0;
         if ((int) $search->children < 1) {
@@ -155,40 +156,40 @@ class DefaultHolidayScorer implements HolidayScorer
 
             return (float) max(0, min(10, $s));
         }
-        if ($option->is_family_friendly) {
+        if ($option->hotel?->is_family_friendly) {
             $s += 2.0;
         }
-        if ($option->has_kids_club) {
+        if ($option->hotel?->has_kids_club) {
             $s += 1.0;
         }
-        if ($option->has_family_rooms) {
+        if ($option->hotel?->has_family_rooms) {
             $s += 0.5;
         }
-        if ($option->has_waterpark) {
+        if ($option->hotel?->has_waterpark) {
             $s += 0.5;
         }
-        if (is_array($search->feature_preferences) && in_array('kids_club', $search->feature_preferences, true) && ! $option->has_kids_club) {
+        if (is_array($search->feature_preferences) && in_array('kids_club', $search->feature_preferences, true) && ! $option->hotel?->has_kids_club) {
             $s -= 2.0;
         }
 
         return (float) max(0, min(10, $s));
     }
 
-    private function dimLocation(SavedHolidaySearch $search, HolidayOption $option): float
+    private function dimLocation(SavedHolidaySearch $search, HolidayPackage $option): float
     {
         $s = 6.0;
         $p = is_array($search->feature_preferences) ? $search->feature_preferences : [];
-        if (in_array('near_beach', $p, true) && $option->distance_to_beach_meters) {
-            $s += $option->distance_to_beach_meters < 500 ? 1.0 : 0.2;
+        if (in_array('near_beach', $p, true) && $option->hotel?->distance_to_beach_meters) {
+            $s += $option->hotel->distance_to_beach_meters < 500 ? 1.0 : 0.2;
         }
-        if (in_array('walkable', $p, true) && $option->distance_to_centre_meters) {
-            $s += $option->distance_to_centre_meters < 1500 ? 1.0 : 0.1;
+        if (in_array('walkable', $p, true) && $option->hotel?->distance_to_centre_meters) {
+            $s += $option->hotel->distance_to_centre_meters < 1500 ? 1.0 : 0.1;
         }
 
         return (float) max(0, min(10, $s));
     }
 
-    private function dimBoard(SavedHolidaySearch $search, HolidayOption $option): float
+    private function dimBoard(SavedHolidaySearch $search, HolidayPackage $option): float
     {
         $p = is_array($search->board_preferences) ? $search->board_preferences : [];
         if ($p === [] || $option->board_type === null) {
@@ -201,7 +202,7 @@ class DefaultHolidayScorer implements HolidayScorer
         return 6.0;
     }
 
-    private function dimPrice(SavedHolidaySearch $search, HolidayOption $option): float
+    private function dimPrice(SavedHolidaySearch $search, HolidayPackage $option): float
     {
         if (! $search->budget_total) {
             return 6.0;
@@ -222,7 +223,7 @@ class DefaultHolidayScorer implements HolidayScorer
      */
     private function recommendationReasons(
         SavedHolidaySearch $search,
-        HolidayOption $option,
+        HolidayPackage $option,
         float $travel,
         float $value,
         float $family
@@ -231,13 +232,13 @@ class DefaultHolidayScorer implements HolidayScorer
         if ($value >= 6.5) {
             $r[] = 'Strong value for this holiday type';
         }
-        if ($option->has_kids_club) {
+        if ($option->hotel?->has_kids_club) {
             $r[] = 'Kids club on site';
         }
         if (strtolower($option->airport_code) === strtolower($search->departure_airport_code) && $travel >= 6) {
             $r[] = 'Departure airport matches your home airport';
         }
-        if ($option->is_family_friendly && (int) $search->children > 0) {
+        if ($option->hotel?->is_family_friendly && (int) $search->children > 0) {
             $r[] = 'Property is marketed as family friendly';
         }
         if (count($r) < 2) {
@@ -253,7 +254,7 @@ class DefaultHolidayScorer implements HolidayScorer
      */
     private function summary(
         SavedHolidaySearch $search,
-        HolidayOption $option,
+        HolidayPackage $option,
         float $overall,
         bool $isDisqualified,
         array $disqualificationList,
@@ -265,7 +266,7 @@ class DefaultHolidayScorer implements HolidayScorer
                 : 'Screened out';
         }
 
-        return 'Solid fit: '.$option->hotel_name.' in '.$option->destination_name.' scores '.number_format($overall, 1).'/10. '
+        return 'Solid fit: '.($option->hotel?->hotel_name ?? 'Hotel').' in '.($option->hotel?->destination_name ?? 'Unknown destination').' scores '.number_format($overall, 1).'/10. '
             .($reasons[0] ?? 'Good overall match');
     }
 }

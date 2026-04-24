@@ -30,8 +30,13 @@ class ProviderSource extends Model
         return $this->hasMany(ProviderImportSnapshot::class);
     }
 
-    public function holidayOptions(): HasMany
+    public function hotels(): HasMany
     {
-        return $this->hasMany(HolidayOption::class);
+        return $this->hasMany(Hotel::class);
+    }
+
+    public function holidayPackages(): HasMany
+    {
+        return $this->hasMany(HolidayPackage::class);
     }
 }

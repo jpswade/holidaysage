@@ -19,7 +19,7 @@ class SavedHolidaySearchRun extends Model
         'parsed_record_count',
         'normalised_record_count',
         'scored_record_count',
-        'imported_holiday_option_ids',
+        'imported_holiday_package_ids',
         'started_at',
         'finished_at',
         'error_message',
@@ -33,7 +33,7 @@ class SavedHolidaySearchRun extends Model
         return [
             'run_type' => SavedHolidaySearchRunType::class,
             'status' => SavedHolidaySearchRunStatus::class,
-            'imported_holiday_option_ids' => 'array',
+            'imported_holiday_package_ids' => 'array',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
         ];

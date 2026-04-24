@@ -2,8 +2,10 @@
 
 namespace App\Services\Normalisation;
 
-use App\Models\HolidayOption;
+use App\Models\HolidayPackage;
+use App\Models\Hotel;
 use App\Models\ProviderSource;
+use Illuminate\Support\Str;
 
 class HolidayOptionNormaliser
 {
@@ -20,50 +22,93 @@ class HolidayOptionNormaliser
         if (empty($data['currency'])) {
             $data['currency'] = 'GBP';
         }
-        if (! isset($data['signature_hash']) || ! is_string($data['signature_hash']) || $data['signature_hash'] === '') {
-            $data['signature_hash'] = $this->buildSignature($provider, $data);
-        }
 
         return $data;
     }
 
-    public function upsert(ProviderSource $provider, array $normalised, ?\DateTimeInterface $now = null): HolidayOption
+    public function upsert(ProviderSource $provider, array $normalised, ?\DateTimeInterface $now = null): HolidayPackage
     {
         $now = $now ?? now();
-        $normalised['provider_source_id'] = $provider->id;
-        $model = HolidayOption::query()->where([
+        [$hotelData, $packageData] = $this->splitHotelAndPackageData($normalised);
+        $hotelData['provider_source_id'] = $provider->id;
+        $packageData['provider_source_id'] = $provider->id;
+
+        $hotelIdentityHash = $this->buildHotelIdentityHash($provider, $hotelData);
+        $hotelData['hotel_identity_hash'] = $hotelIdentityHash;
+        $hotel = Hotel::query()->where([
             'provider_source_id' => $provider->id,
-            'signature_hash' => $normalised['signature_hash'],
+            'hotel_identity_hash' => $hotelIdentityHash,
         ])->first();
-
-        if (! $model) {
-            $normalised['first_seen_at'] = $now;
+        if (! $hotel) {
+            $hotelData['first_seen_at'] = $now;
         }
-        $normalised['last_seen_at'] = $now;
-        $fill = array_intersect_key(
-            $normalised,
-            array_flip((new HolidayOption)->getFillable())
+        $hotelData['last_seen_at'] = $now;
+        $hotelFill = array_intersect_key(
+            $hotelData,
+            array_flip((new Hotel)->getFillable())
         );
-        if (! $model) {
-            return HolidayOption::query()->create($fill);
+        if (! $hotel) {
+            $hotel = Hotel::query()->create($hotelFill);
+        } else {
+            $hotel->fill($hotelFill);
+            $hotel->save();
         }
-        $model->fill($fill);
-        $model->save();
 
-        return $model;
+        $packageData['hotel_id'] = $hotel->id;
+        $packageSignature = $this->buildPackageSignature($provider, $hotel, $packageData);
+        $packageData['signature_hash'] = $packageSignature;
+        $package = HolidayPackage::query()->where([
+            'provider_source_id' => $provider->id,
+            'signature_hash' => $packageSignature,
+        ])->first();
+        if (! $package) {
+            $packageData['first_seen_at'] = $now;
+        }
+        $packageData['last_seen_at'] = $now;
+        $packageFill = array_intersect_key(
+            $packageData,
+            array_flip((new HolidayPackage)->getFillable())
+        );
+        if (! $package) {
+            return HolidayPackage::query()->create($packageFill);
+        }
+        $package->fill($packageFill);
+        $package->save();
+
+        return $package;
     }
 
     /**
      * @param  array<string, mixed>  $data
      */
-    private function buildSignature(ProviderSource $provider, array $data): string
+    private function buildHotelIdentityHash(ProviderSource $provider, array $data): string
+    {
+        $providerHotelId = trim((string) ($data['provider_hotel_id'] ?? ''));
+        if ($providerHotelId !== '') {
+            return hash('sha256', $provider->id.'|'.$providerHotelId);
+        }
+
+        $parts = [
+            (string) $provider->id,
+            Str::lower(trim((string) ($data['hotel_name'] ?? ''))),
+            Str::lower(trim((string) ($data['destination_name'] ?? ''))),
+            Str::lower(trim((string) ($data['destination_country'] ?? ''))),
+        ];
+
+        return hash('sha256', implode('|', $parts));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function buildPackageSignature(ProviderSource $provider, Hotel $hotel, array $data): string
     {
         $parts = [
             (string) $provider->id,
-            (string) ($data['provider_option_id'] ?? ''),
+            (string) $hotel->id,
             (string) ($data['departure_date'] ?? ''),
             (string) ($data['nights'] ?? ''),
-            strtolower((string) ($data['hotel_name'] ?? '')),
+            strtoupper((string) ($data['airport_code'] ?? '')),
             (string) ($data['board_type'] ?? ''),
             (string) ($data['adults'] ?? '').'-'.(string) ($data['children'] ?? '').'-'.(string) ($data['infants'] ?? ''),
         ];
@@ -91,5 +136,70 @@ class HolidayOptionNormaliser
         }
 
         return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $normalised
+     * @return array{0: array<string, mixed>, 1: array<string, mixed>}
+     */
+    private function splitHotelAndPackageData(array $normalised): array
+    {
+        $hotelKeys = [
+            'provider_hotel_id',
+            'hotel_name',
+            'hotel_slug',
+            'resort_name',
+            'destination_name',
+            'destination_country',
+            'star_rating',
+            'review_score',
+            'review_count',
+            'is_family_friendly',
+            'has_kids_club',
+            'has_waterpark',
+            'has_family_rooms',
+            'distance_to_beach_meters',
+            'distance_to_centre_meters',
+            'latitude',
+            'longitude',
+            'raw_attributes',
+        ];
+        $packageKeys = [
+            'provider_option_id',
+            'provider_url',
+            'airport_code',
+            'departure_date',
+            'return_date',
+            'nights',
+            'adults',
+            'children',
+            'infants',
+            'board_type',
+            'price_total',
+            'price_per_person',
+            'currency',
+            'flight_outbound_duration_minutes',
+            'flight_inbound_duration_minutes',
+            'transfer_minutes',
+        ];
+
+        $hotelData = [];
+        foreach ($hotelKeys as $key) {
+            if (array_key_exists($key, $normalised)) {
+                $hotelData[$key] = $normalised[$key];
+            }
+        }
+        $packageData = [];
+        foreach ($packageKeys as $key) {
+            if (array_key_exists($key, $normalised)) {
+                $packageData[$key] = $normalised[$key];
+            }
+        }
+        $packageData['raw_attributes'] = $normalised['raw_attributes'] ?? null;
+        if (($packageData['board_type'] ?? null) === null) {
+            $packageData['board_type'] = '';
+        }
+
+        return [$hotelData, $packageData];
     }
 }

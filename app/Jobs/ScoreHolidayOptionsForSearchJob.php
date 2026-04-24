@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Contracts\HolidayScorer;
 use App\Enums\SavedHolidaySearchRunStatus;
-use App\Models\HolidayOption;
+use App\Models\HolidayPackage;
 use App\Models\SavedHolidaySearch;
 use App\Models\SavedHolidaySearchRun;
 use App\Models\ScoredHolidayOption;
@@ -38,10 +38,10 @@ class ScoreHolidayOptionsForSearchJob implements ShouldQueue
                 ->where('saved_holiday_search_run_id', $run->id)
                 ->delete();
 
-            $ids = is_array($run->imported_holiday_option_ids) ? $run->imported_holiday_option_ids : [];
+            $ids = is_array($run->imported_holiday_package_ids) ? $run->imported_holiday_package_ids : [];
             $rows = [];
             foreach ($ids as $id) {
-                $opt = HolidayOption::query()->find($id);
+                $opt = HolidayPackage::query()->with('hotel')->find($id);
                 if (! $opt) {
                     continue;
                 }
@@ -83,7 +83,7 @@ class ScoreHolidayOptionsForSearchJob implements ShouldQueue
                 ScoredHolidayOption::query()->create([
                     'saved_holiday_search_id' => $search->id,
                     'saved_holiday_search_run_id' => $run->id,
-                    'holiday_option_id' => $opt->id,
+                    'holiday_package_id' => $opt->id,
                     'overall_score' => $b->overallScore,
                     'travel_score' => $b->travelScore,
                     'value_score' => $b->valueScore,

@@ -51,16 +51,16 @@ class NormaliseHolidayCandidateJob implements ShouldQueue
                 if (! $run) {
                     return;
                 }
-                $ids = $run->imported_holiday_option_ids ?? [];
+                $ids = $run->imported_holiday_package_ids ?? [];
                 $ids[] = $option->id;
-                $run->imported_holiday_option_ids = $ids;
+                $run->imported_holiday_package_ids = $ids;
                 $run->normalised_record_count = count($ids);
                 $run->save();
             });
 
             Log::info('holidaysage.normalise.option', [
                 'run_id' => $this->runId,
-                'holiday_option_id' => $option->id,
+                'holiday_package_id' => $option->id,
             ]);
         } catch (Throwable $e) {
             Log::error('holidaysage.normalise.failed', [

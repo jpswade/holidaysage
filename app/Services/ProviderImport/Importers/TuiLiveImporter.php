@@ -79,7 +79,10 @@ class TuiLiveImporter implements ProviderHttpImporter
                 'hotel_slug' => $slug,
                 'resort_name' => null,
                 'destination_name' => $search->destination_preferences[0] ?? 'Unknown destination',
-                'destination_country' => 'Unknown',
+                'destination_country' => $this->resolveDestinationCountry(
+                    $doc['address']['addressCountry'] ?? null,
+                    is_string($doc['url'] ?? null) ? $doc['url'] : $url
+                ),
                 'airport_code' => $search->departure_airport_code,
                 'departure_date' => $dep,
                 'return_date' => $ret,
@@ -113,5 +116,26 @@ class TuiLiveImporter implements ProviderHttpImporter
         }
 
         return $candidates;
+    }
+
+    private function resolveDestinationCountry(mixed $rawCountry, string $providerUrl): ?string
+    {
+        if (is_string($rawCountry)) {
+            $rawCountry = trim($rawCountry);
+            if ($rawCountry !== '' && strcasecmp($rawCountry, 'unknown') !== 0) {
+                return $rawCountry;
+            }
+        }
+
+        $path = parse_url($providerUrl, PHP_URL_PATH);
+        if (! is_string($path) || $path === '') {
+            return null;
+        }
+        $parts = array_values(array_filter(explode('/', trim($path, '/'))));
+        if (count($parts) >= 3 && strtolower($parts[0]) === 'destinations') {
+            return Str::of($parts[2])->replace('-', ' ')->title()->value();
+        }
+
+        return null;
     }
 }
