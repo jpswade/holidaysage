@@ -209,6 +209,25 @@ class Jet2LiveImporter implements ProviderHttpImporter
             if ($price === null && isset($item['price']) && is_array($item['price'])) {
                 $price = $item['price']['totalPrice'] ?? $item['price']['fromPrice'] ?? null;
             }
+            if ($price === null && isset($item['accommodationOptions']) && is_array($item['accommodationOptions'])) {
+                foreach ($item['accommodationOptions'] as $opt) {
+                    if (! is_array($opt) || ! isset($opt['priceOptions']) || ! is_array($opt['priceOptions'])) {
+                        continue;
+                    }
+                    foreach ($opt['priceOptions'] as $po) {
+                        if (! is_array($po)) {
+                            continue;
+                        }
+                        $candidatePrice = $po['totalPrice'] ?? $po['basePrice'] ?? null;
+                        if (is_numeric($candidatePrice)) {
+                            $candidateFloat = (float) $candidatePrice;
+                            if ($candidateFloat > 0 && ($price === null || $candidateFloat < (float) $price)) {
+                                $price = $candidateFloat;
+                            }
+                        }
+                    }
+                }
+            }
 
             $dep = $search->travel_start_date ? $search->travel_start_date->toDateString() : now()->addMonths(2)->toDateString();
             $nights = max(1, (int) ($item['duration'] ?? $search->duration_min_nights));
