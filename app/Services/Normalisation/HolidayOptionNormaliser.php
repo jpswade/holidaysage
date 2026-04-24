@@ -158,11 +158,21 @@ class HolidayOptionNormaliser
             'has_kids_club',
             'has_waterpark',
             'has_family_rooms',
+            'has_lift',
+            'ground_floor_available',
+            'accessibility_issues',
             'distance_to_beach_meters',
             'distance_to_centre_meters',
+            'distance_to_airport_km',
+            'rooms_count',
+            'blocks_count',
+            'floors_count',
+            'restaurants_count',
+            'bars_count',
+            'pools_count',
+            'sports_leisure_count',
             'latitude',
             'longitude',
-            'raw_attributes',
         ];
         $packageKeys = [
             'provider_option_id',
@@ -175,12 +185,17 @@ class HolidayOptionNormaliser
             'children',
             'infants',
             'board_type',
+            'board_recommended',
             'price_total',
             'price_per_person',
             'currency',
             'flight_outbound_duration_minutes',
             'flight_inbound_duration_minutes',
             'transfer_minutes',
+            'outbound_flight_time_text',
+            'inbound_flight_time_text',
+            'local_beer_price',
+            'three_course_meal_for_two_price',
         ];
 
         $hotelData = [];
@@ -195,7 +210,25 @@ class HolidayOptionNormaliser
                 $packageData[$key] = $normalised[$key];
             }
         }
-        $packageData['raw_attributes'] = $normalised['raw_attributes'] ?? null;
+        $raw = is_array($normalised['raw_attributes'] ?? null) ? $normalised['raw_attributes'] : [];
+        $hotelRaw = [];
+        $packageRaw = [];
+        foreach ($raw as $key => $value) {
+            if (in_array((string) $key, ['property', 'features', 'keySellingPoints', 'distance_to_airport_km'], true)) {
+                $hotelRaw[$key] = $value;
+                continue;
+            }
+            if (in_array((string) $key, ['accommodation_options', 'outbound_flight', 'inbound_flight'], true)) {
+                $packageRaw[$key] = $value;
+                continue;
+            }
+            $hotelRaw[$key] = $value;
+            $packageRaw[$key] = $value;
+        }
+        if ($hotelRaw !== []) {
+            $hotelData['raw_attributes'] = ['hotel_extra' => $hotelRaw];
+        }
+        $packageData['raw_attributes'] = $packageRaw === [] ? null : ['package_extra' => $packageRaw];
         if (($packageData['board_type'] ?? null) === null) {
             $packageData['board_type'] = '';
         }

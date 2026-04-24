@@ -276,6 +276,11 @@ class Jet2LiveImporter implements ProviderHttpImporter
                     'source' => 'jet2_smartsearch_api',
                     'property' => $property,
                     'accommodation_options' => $item['accommodationOptions'] ?? null,
+                    'distance_to_airport_km' => is_numeric($item['distanceToAirportKm'] ?? null)
+                        ? (float) $item['distanceToAirportKm']
+                        : (is_numeric($property['distanceToAirportKm'] ?? null) ? (float) $property['distanceToAirportKm'] : null),
+                    'outbound_flight' => is_string($item['outboundFlight'] ?? null) ? $item['outboundFlight'] : null,
+                    'inbound_flight' => is_string($item['inboundFlight'] ?? null) ? $item['inboundFlight'] : null,
                 ],
             ];
         }
