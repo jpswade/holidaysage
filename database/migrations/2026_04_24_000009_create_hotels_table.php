@@ -21,10 +21,10 @@ return new class extends Migration
             $table->unsignedTinyInteger('star_rating')->nullable();
             $table->decimal('review_score', 3, 1)->nullable();
             $table->unsignedInteger('review_count')->nullable();
-            $table->boolean('is_family_friendly')->default(false);
-            $table->boolean('has_kids_club')->default(false);
-            $table->boolean('has_waterpark')->default(false);
-            $table->boolean('has_family_rooms')->default(false);
+            $table->boolean('is_family_friendly')->nullable();
+            $table->boolean('has_kids_club')->nullable();
+            $table->boolean('has_waterpark')->nullable();
+            $table->boolean('has_family_rooms')->nullable();
             $table->unsignedInteger('distance_to_beach_meters')->nullable();
             $table->unsignedInteger('distance_to_centre_meters')->nullable();
             $table->decimal('latitude', 10, 7)->nullable();

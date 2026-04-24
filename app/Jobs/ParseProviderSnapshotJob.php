@@ -65,12 +65,12 @@ class ParseProviderSnapshotJob implements ShouldQueue
             $providerId = $snapshot->provider_source_id;
 
             $jobs = array_map(
-                fn (array $c) => new NormaliseHolidayCandidateJob($run->id, $search->id, $providerId, $c),
+                fn (array $c) => new LookupHolidayDetailJob($run->id, $search->id, $providerId, $c),
                 $candidates
             );
 
             Bus::batch($jobs)
-                ->name('normalise-run-'.$run->id)
+                ->name('detail-enrichment-run-'.$run->id)
                 ->allowFailures(false)
                 ->onQueue('default')
                 ->then(function () use ($search, $run) {
