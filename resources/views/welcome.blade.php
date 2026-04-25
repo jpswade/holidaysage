@@ -22,75 +22,75 @@
         </div>
     </section>
 
-    <section class="border-y border-slate-200 py-14 md:py-16">
-        <div class="mx-auto max-w-6xl">
+    <section class="relative left-1/2 w-screen -translate-x-1/2 border-y border-slate-200 bg-white py-14 md:py-16">
+        <div class="mx-auto max-w-6xl px-6 md:px-8">
             <h2 class="text-center text-4xl font-bold tracking-tight text-slate-900">How HolidaySage works</h2>
             <p class="mt-3 text-center text-lg text-slate-600">We do the hard work so you can focus on getting excited about your trip.</p>
-            <div class="mt-8 grid gap-4 md:grid-cols-3">
-                <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div class="mt-8 grid gap-5 md:grid-cols-3">
+                <article class="rounded-2xl border border-slate-200 bg-[#fffdfa] p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                     <div class="flex items-center justify-between">
-                        <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><x-lucide-compass class="h-5 w-5" /></span>
-                        <span class="text-3xl font-semibold text-slate-200">1</span>
+                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-emerald-50 text-teal-700 shadow-sm"><x-lucide-compass class="h-5 w-5" /></span>
+                        <span class="text-4xl font-semibold text-slate-100">1</span>
                     </div>
-                    <h3 class="mt-5 text-lg font-semibold text-slate-900">Define your preferences</h3>
-                    <p class="mt-2 text-sm leading-relaxed text-slate-600">Tell us where you want to go, when, who is travelling, and what matters most.</p>
+                    <h3 class="mt-5 text-xl font-semibold tracking-tight text-slate-900">Define your preferences</h3>
+                    <p class="mt-3 text-base leading-relaxed text-slate-600">Tell us where you want to go, when, who's travelling, and what matters most - like being near the beach or having a kids club.</p>
                 </article>
-                <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <article class="rounded-2xl border border-slate-200 bg-[#fffdfa] p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                     <div class="flex items-center justify-between">
-                        <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><x-lucide-refresh-cw class="h-5 w-5" /></span>
-                        <span class="text-3xl font-semibold text-slate-200">2</span>
+                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-emerald-50 text-teal-700 shadow-sm"><x-lucide-refresh-cw class="h-5 w-5" /></span>
+                        <span class="text-4xl font-semibold text-slate-100">2</span>
                     </div>
-                    <h3 class="mt-5 text-lg font-semibold text-slate-900">We track continuously</h3>
-                    <p class="mt-2 text-sm leading-relaxed text-slate-600">Our system monitors Jet2 and TUI around the clock, including price changes.</p>
+                    <h3 class="mt-5 text-xl font-semibold tracking-tight text-slate-900">We track continuously</h3>
+                    <p class="mt-3 text-base leading-relaxed text-slate-600">Our system monitors Jet2 and TUI around the clock, finding matching holidays and tracking price changes.</p>
                 </article>
-                <article class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <article class="rounded-2xl border border-slate-200 bg-[#fffdfa] p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                     <div class="flex items-center justify-between">
-                        <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><x-lucide-star class="h-5 w-5" /></span>
-                        <span class="text-3xl font-semibold text-slate-200">3</span>
+                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-emerald-50 text-teal-700 shadow-sm"><x-lucide-star class="h-5 w-5" /></span>
+                        <span class="text-4xl font-semibold text-slate-100">3</span>
                     </div>
-                    <h3 class="mt-5 text-lg font-semibold text-slate-900">Get ranked recommendations</h3>
-                    <p class="mt-2 text-sm leading-relaxed text-slate-600">See a shortlist of options, each with a score that explains why it is recommended.</p>
+                    <h3 class="mt-5 text-xl font-semibold tracking-tight text-slate-900">Get ranked recommendations</h3>
+                    <p class="mt-3 text-base leading-relaxed text-slate-600">See a shortlist of the best options, each with a score showing how well it matches your preferences. Results improve over time.</p>
                 </article>
             </div>
         </div>
     </section>
 
-    <section class="py-16">
-        <div class="grid gap-8 lg:grid-cols-2 lg:items-start">
+    <section class="py-12 md:py-14">
+        <div class="grid gap-6 lg:grid-cols-2 lg:items-start">
             <div>
-                <h2 class="text-5xl font-bold tracking-tight text-slate-900">Why use HolidaySage?</h2>
-                <ul class="mt-8 space-y-5">
+                <h2 class="text-4xl font-bold tracking-tight text-slate-900">Why use HolidaySage?</h2>
+                <ul class="mt-6 space-y-4">
                     <li class="flex gap-3">
                         <x-lucide-circle-check class="mt-0.5 h-5 w-5 text-teal-600" />
-                        <div><p class="text-2xl font-semibold text-slate-900">Save hours of searching</p><p class="text-lg text-slate-600">No more opening 50 tabs and comparing prices manually.</p></div>
+                        <div><p class="text-xl font-semibold text-slate-900">Save hours of searching</p><p class="text-base text-slate-600">No more opening 50 tabs and comparing prices manually.</p></div>
                     </li>
                     <li class="flex gap-3">
                         <x-lucide-circle-check class="mt-0.5 h-5 w-5 text-teal-600" />
-                        <div><p class="text-2xl font-semibold text-slate-900">Smart recommendations</p><p class="text-lg text-slate-600">Our AI explains why each option is recommended for your specific needs.</p></div>
+                        <div><p class="text-xl font-semibold text-slate-900">Smart recommendations</p><p class="text-base text-slate-600">Our AI explains why each option is recommended for your specific needs.</p></div>
                     </li>
                     <li class="flex gap-3">
                         <x-lucide-circle-check class="mt-0.5 h-5 w-5 text-teal-600" />
-                        <div><p class="text-2xl font-semibold text-slate-900">Never miss a deal</p><p class="text-lg text-slate-600">Continuous tracking means we catch price drops and new availability.</p></div>
+                        <div><p class="text-xl font-semibold text-slate-900">Never miss a deal</p><p class="text-base text-slate-600">Continuous tracking means we catch price drops and new availability.</p></div>
                     </li>
                     <li class="flex gap-3">
                         <x-lucide-circle-check class="mt-0.5 h-5 w-5 text-teal-600" />
-                        <div><p class="text-2xl font-semibold text-slate-900">Expert guidance</p><p class="text-lg text-slate-600">Get confidence in your choice with clear scores and explanations.</p></div>
+                        <div><p class="text-xl font-semibold text-slate-900">Expert guidance</p><p class="text-base text-slate-600">Get confidence in your choice with clear scores and explanations.</p></div>
                     </li>
                 </ul>
             </div>
 
-            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div class="flex items-center justify-between">
                     <p class="text-sm font-medium text-slate-500">Top pick</p>
                     <span class="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">Top Pick</span>
                 </div>
                 <div class="mt-4 flex items-start justify-between gap-4">
                     <div>
-                        <h3 class="text-3xl font-semibold text-slate-900">Secrets Lanzarote Resort</h3>
-                        <p class="mt-1 text-xl text-slate-600">Lanzarote, Canary Islands</p>
+                        <h3 class="text-2xl font-semibold text-slate-900">Secrets Lanzarote Resort</h3>
+                        <p class="mt-1 text-lg text-slate-600">Lanzarote, Canary Islands</p>
                     </div>
-                    <div class="rounded-2xl bg-green-600 px-4 py-3 text-center text-white">
-                        <p class="text-4xl font-bold leading-none">9.4</p>
+                    <div class="rounded-2xl bg-green-600 px-4 py-2.5 text-center text-white">
+                        <p class="text-3xl font-bold leading-none">9.4</p>
                         <p class="mt-1 text-xs font-semibold uppercase tracking-wide text-green-100">/10</p>
                     </div>
                 </div>
@@ -99,19 +99,19 @@
                     <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-700">50m from beach</span>
                     <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-medium text-slate-700">Spa included</span>
                 </div>
-                <p class="mt-4 text-lg leading-relaxed text-slate-600">Exceptional value for a luxury adults-only resort. The beachfront location and included spa treatments make this a standout choice.</p>
-                <div class="mt-5 border-t border-slate-200 pt-5">
-                    <p class="text-5xl font-bold text-slate-900">£1,847</p>
+                <p class="mt-4 text-base leading-relaxed text-slate-600">Exceptional value for a luxury adults-only resort. The beachfront location and included spa treatments make this a standout choice.</p>
+                <div class="mt-4 border-t border-slate-200 pt-4">
+                    <p class="text-4xl font-bold text-slate-900">£1,847</p>
                     <div class="mt-1 flex items-center justify-between">
-                        <p class="text-lg text-slate-600">£924 per person</p>
-                        <span class="inline-flex items-center gap-1 text-lg font-semibold text-teal-700"><x-lucide-badge-pound-sterling class="h-5 w-5" />Best value</span>
+                        <p class="text-base text-slate-600">£924 per person</p>
+                        <span class="inline-flex items-center gap-1 text-base font-semibold text-teal-700"><x-lucide-badge-pound-sterling class="h-4 w-4" />Best value</span>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <section class="border-t border-slate-200 py-16 text-center">
+    <section class="relative left-1/2 w-screen -translate-x-1/2 border-t border-slate-200 bg-white py-16 text-center">
         <h2 class="text-5xl font-bold tracking-tight text-slate-900">Ready to find your perfect holiday?</h2>
         <p class="mt-4 text-2xl text-slate-600">Create your first search in under 2 minutes.</p>
         <a href="{{ route('searches.create') }}" class="mt-8 inline-flex items-center gap-2 rounded-xl bg-teal-600 px-8 py-4 text-xl font-semibold text-white transition hover:bg-teal-700">
