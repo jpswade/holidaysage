@@ -9,6 +9,7 @@ use App\Http\Requests\StoreSavedHolidaySearchRequest;
 use App\Jobs\RefreshSavedHolidaySearchJob;
 use App\Models\SavedHolidaySearch;
 use App\Models\SavedHolidaySearchRun;
+use App\Models\ScoredHolidayOption;
 use App\Services\Imports\ImportUrlParserRegistry;
 use App\ViewModels\ResultCardViewModel;
 use App\ViewModels\SearchSummaryViewModel;
@@ -108,6 +109,24 @@ class SearchController extends Controller
         ]);
     }
 
+    public function deal(SavedHolidaySearch $search, ScoredHolidayOption $scoredOption): View
+    {
+        abort_unless($scoredOption->saved_holiday_search_id === $search->id, 404);
+
+        $scoredOption->load(['holidayPackage.hotel', 'holidayPackage.providerSource']);
+        $card = ResultCardViewModel::fromModel($scoredOption);
+        $package = $scoredOption->holidayPackage;
+        $provider = $package?->providerSource;
+        $providerUrl = $this->absoluteProviderUrl($package?->provider_url, $provider?->base_url);
+
+        return view('searches.deal', [
+            'search' => $search,
+            'summary' => SearchSummaryViewModel::fromModel($search),
+            'card' => $card,
+            'providerUrl' => $providerUrl,
+        ]);
+    }
+
     public function results(SavedHolidaySearch $search): RedirectResponse
     {
         return redirect()->route('searches.show', $search);
@@ -151,5 +170,22 @@ class SearchController extends Controller
         }
 
         return $slug;
+    }
+
+    private function absoluteProviderUrl(?string $providerUrl, ?string $baseUrl): ?string
+    {
+        if (! is_string($providerUrl) || $providerUrl === '') {
+            return null;
+        }
+
+        if (str_starts_with($providerUrl, 'http://') || str_starts_with($providerUrl, 'https://')) {
+            return $providerUrl;
+        }
+
+        if (! is_string($baseUrl) || $baseUrl === '') {
+            return $providerUrl;
+        }
+
+        return rtrim($baseUrl, '/').'/'.ltrim($providerUrl, '/');
     }
 }

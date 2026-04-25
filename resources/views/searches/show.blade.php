@@ -68,9 +68,9 @@
 
     <section class="mt-6">
         @if ($results instanceof \Illuminate\Support\Collection && $results->isNotEmpty())
-            <div class="space-y-4">
+            <div class="grid gap-4 md:grid-cols-2">
                 @foreach ($results as $card)
-                    @include('searches.partials.recommendation-card', ['card' => $card, 'elevated' => false])
+                    @include('searches.partials.recommendation-card', ['card' => $card, 'search' => $search, 'elevated' => false])
                 @endforeach
             </div>
         @else

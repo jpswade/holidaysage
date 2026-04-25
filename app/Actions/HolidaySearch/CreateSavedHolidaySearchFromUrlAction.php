@@ -51,8 +51,7 @@ class CreateSavedHolidaySearchFromUrlAction
      */
     private function mergeWithDefaults(string $url, ProviderSource $provider, array $extracted, bool $isUpdate): array
     {
-        $host = (string) parse_url($url, PHP_URL_HOST);
-        $name = 'Import — '.$provider->name.($host ? ' ('.$host.')' : '');
+        $name = $provider->name.' Search';
         $baseSlug = Str::slug('import-'.$provider->key.'-'.Str::random(8));
 
         $start = $extracted['travel_start_date'] ?? null;

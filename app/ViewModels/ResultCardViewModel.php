@@ -30,6 +30,7 @@ class ResultCardViewModel
         public readonly array $warnings,
         public readonly array $featureChips,
         public readonly ?string $review,
+        public readonly ?string $imageUrl,
         public readonly bool $isDisqualified,
     ) {}
 
@@ -83,8 +84,74 @@ class ResultCardViewModel
             warnings: array_values(array_filter(array_map('strval', $row->warning_flags ?? []))),
             featureChips: $featureChips,
             review: $review,
+            imageUrl: self::extractImageUrl($package?->raw_attributes, $hotel?->raw_attributes),
             isDisqualified: (bool) $row->is_disqualified,
         );
+    }
+
+    private static function extractImageUrl(?array $packageRaw, ?array $hotelRaw): ?string
+    {
+        $paths = [
+            ['hotel_extra', 'property', 'image'],
+            ['hotel_extra', 'property', 'images', 0],
+            ['hotel_extra', 'property', 'heroImage'],
+            ['package_extra', 'property', 'image'],
+            ['package_extra', 'property', 'images', 0],
+            // Legacy path for rows saved before hotel/package raw wrapping.
+            ['property', 'image'],
+        ];
+
+        foreach ($paths as $path) {
+            $hotelValue = self::valueAtPath($hotelRaw, $path);
+            if (is_string($hotelValue) && self::looksLikeImageUrl($hotelValue)) {
+                return $hotelValue;
+            }
+
+            $packageValue = self::valueAtPath($packageRaw, $path);
+            if (is_string($packageValue) && self::looksLikeImageUrl($packageValue)) {
+                return $packageValue;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $payload
+     * @param  list<string|int>  $path
+     */
+    private static function valueAtPath(?array $payload, array $path): mixed
+    {
+        $current = $payload;
+
+        foreach ($path as $segment) {
+            if (! is_array($current) || ! array_key_exists($segment, $current)) {
+                return null;
+            }
+            $current = $current[$segment];
+        }
+
+        return $current;
+    }
+
+    private static function looksLikeImageUrl(string $value): bool
+    {
+        if (! filter_var($value, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        if ((bool) preg_match('/\.(jpg|jpeg|png|webp|gif)(\?|$)/i', $value)) {
+            return true;
+        }
+
+        $host = parse_url($value, PHP_URL_HOST);
+        $path = parse_url($value, PHP_URL_PATH);
+
+        if (! is_string($host) || ! is_string($path)) {
+            return false;
+        }
+
+        return str_contains($host, 'media.jet2.com') && str_starts_with($path, '/is/image/');
     }
 
     private static function minutesToText(int $minutes): string

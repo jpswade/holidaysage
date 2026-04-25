@@ -14,6 +14,7 @@ Route::prefix('searches')->name('searches.')->group(function (): void {
     Route::post('/', [SearchController::class, 'store'])->name('store');
     Route::post('/import', [SearchController::class, 'import'])->name('import');
     Route::get('/{search}', [SearchController::class, 'show'])->name('show');
+    Route::get('/{search}/deals/{scoredOption}', [SearchController::class, 'deal'])->name('deals.show');
     Route::post('/{search}/refresh', [SearchController::class, 'refresh'])->name('refresh');
     Route::get('/{search}/results', [SearchController::class, 'results'])->name('results');
 });
