@@ -4,22 +4,22 @@ overview: Implement the customer-facing HolidaySage frontend by translating the 
 todos:
   - id: git-pr-workflow
     content: Implement this UI plan on a dedicated branch with incremental commits, then push and open a PR at completion.
-    status: pending
+    status: completed
   - id: frontend-route-map
     content: Add and align all customer-facing web routes/controllers for landing, create, index, detail, results, import, and refresh flows.
-    status: pending
+    status: completed
   - id: search-ui-pages
     content: Implement Blade/Tailwind page templates and shared UI components for landing, create search, saved searches index, and results views.
-    status: pending
+    status: completed
   - id: view-model-binding
     content: Wire page data to saved search and scored option models via presenters/helpers with robust empty/loading/error states.
-    status: pending
+    status: completed
   - id: interactive-actions
     content: Implement provider URL prefill interaction and manual refresh UX feedback loop in create/detail pages.
-    status: pending
+    status: completed
   - id: quality-gates
     content: Add feature tests and responsive/accessibility checks for core customer journey before go-live.
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -358,6 +358,47 @@ Offer complete ranked comparison without losing recommendation context.
 - **Never block rendering on enrichment nulls:**
   - page must remain fully usable with base import payload only.
 
+## Provider Field Availability Contract (UI Expectations)
+- Define explicit frontend expectations by provider so QA and design do not assume universal enrichment parity.
+- **Jet2 (current enriched baseline):**
+  - expected to frequently provide:
+    - review metrics (`review_score`, `review_count`)
+    - location/distance signals (resort/area, airport distance where parsed)
+    - facility counts and selected accessibility indicators
+    - richer package descriptors (board recommendation, flight time text variants)
+  - UI behaviour:
+    - show these as primary or secondary evidence when present.
+    - do not hard-fail card sections when any individual field is missing.
+- **TUI (current partial baseline):**
+  - assume core scoring/display fields are available first (price, board, travel basics, recommendation text).
+  - treat enrichment fields as opportunistic until equivalent parser coverage exists.
+  - UI behaviour:
+    - preserve identical card layout but hide unavailable enrichment chips/rows.
+    - avoid “missing data” copy unless needed for debugging/admin views.
+- **Forward-compatibility rule:**
+  - any newly enriched provider field must be additive to the view model contract and guarded by presence checks before rendering.
+
+## Presenter and ViewModel Contract (Backend-Frontend Boundary)
+- Introduce explicit presenter layer for consumer pages:
+  - `SearchSummaryViewModel`
+  - `ResultCardViewModel`
+  - `TopPickViewModel`
+- `ResultCardViewModel` contract should include:
+  - **Identity block**: `providerName`, `hotelName`, `destinationLabel`, `providerUrl`.
+  - **Rank and score**: `rank`, `overallScore`, optional sub-scores.
+  - **Travel facts**: `nights`, `flightOutboundMinutes`, `flightInboundMinutes`, `transferMinutes`, plus optional text variants.
+  - **Pricing**: `priceTotal`, `pricePerPerson`, optional value context.
+  - **Recommendation trust**: `summary`, `reasons[]`, `warnings[]`.
+  - **Enrichment evidence**: optional `review`, `facilityCounts`, `accessibilitySignals`, `distanceSignals`, `boardRecommendation`.
+  - **Display guards**: precomputed booleans (for example `showReviewChip`, `showAccessibilityRow`) so Blade views stay simple.
+- Fallback policy:
+  - formatters produce display-safe strings and units.
+  - if an optional field is null, omit that subcomponent cleanly.
+  - if required core fields are absent, render deterministic safe fallback text and keep CTA/actions functional.
+- Testing responsibility:
+  - unit-test presenter formatting/guard logic independently from Blade.
+  - feature-test page rendering with mixed provider payloads (enriched Jet2, partial TUI, sparse fallback fixtures).
+
 ## Branch, Commit, Push, PR Workflow (Execution Constraint)
 - Implementation must run on a dedicated branch created from latest target base branch (expected `main` unless changed before execution).
 - Suggested branch naming: `feature/frontend-customer-ui-v0-parity`.
@@ -383,9 +424,10 @@ Offer complete ranked comparison without losing recommendation context.
 2. **Landing + Create page**: hero/CTA flow and full search form UX.
 3. **Saved Searches index**: card listing, statuses, trend and freshness signals.
 4. **Search Detail + Results**: top pick, ranked cards, reasons/warnings, full list.
-5. **Enriched data integration**: surface upgraded hotel/package fields with graceful null fallbacks.
-6. **Interaction polish**: import, refresh feedback, empty/loading/error states.
-7. **QA, commit finalisation, push, PR**: responsive/accessibility checks, tests, final push, PR opening.
+5. **Presenter contract implementation**: add view models/formatters and wire provider-guarded rendering logic.
+6. **Enriched data integration**: surface upgraded hotel/package fields with graceful null fallbacks.
+7. **Interaction polish**: import, refresh feedback, empty/loading/error states.
+8. **QA, commit finalisation, push, PR**: responsive/accessibility checks, tests, final push, PR opening.
 
 ## Test & Acceptance Plan
 - Feature tests for:
@@ -394,6 +436,8 @@ Offer complete ranked comparison without losing recommendation context.
   - saved searches index renders summaries
   - search detail shows top pick + ranked shortlist
   - full results page renders ranked cards consistently
+  - presenter/view-model guards produce stable output for enriched and sparse payloads
+  - Jet2 enriched fields and TUI partial fields both render without layout regressions
   - enriched hotel/package facts render only when source data exists
   - enriched nulls do not regress card layout or create noisy placeholders
   - import endpoint returns prefill payload for supported URL
