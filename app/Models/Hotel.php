@@ -58,6 +58,7 @@ class Hotel extends Model
         'latitude',
         'longitude',
         'raw_attributes',
+        'images',
         'first_seen_at',
         'last_seen_at',
     ];
@@ -69,6 +70,7 @@ class Hotel extends Model
     {
         return [
             'raw_attributes' => 'array',
+            'images' => 'array',
             'is_family_friendly' => 'boolean',
             'has_kids_club' => 'boolean',
             'kids_club_age_min' => 'integer',
@@ -101,5 +103,37 @@ class Hotel extends Model
     public function holidayPackages(): HasMany
     {
         return $this->hasMany(HolidayPackage::class);
+    }
+
+    public function photos(): HasMany
+    {
+        return $this->hasMany(HotelPhoto::class)->orderBy('position');
+    }
+
+    /**
+     * First image for UI: prefer locally cached `hotel_photos`, else first URL from structured `images` JSON.
+     */
+    public function primaryImageUrlForDisplay(): ?string
+    {
+        foreach ($this->photos as $photo) {
+            $url = $photo->publicUrl();
+            if ($url !== null) {
+                return $url;
+            }
+        }
+
+        $images = $this->images;
+        if (! is_array($images) || $images === []) {
+            return null;
+        }
+        $first = $images[0] ?? null;
+        if (is_string($first) && filter_var($first, FILTER_VALIDATE_URL)) {
+            return $first;
+        }
+        if (is_array($first) && isset($first['url']) && is_string($first['url']) && filter_var($first['url'], FILTER_VALIDATE_URL)) {
+            return $first['url'];
+        }
+
+        return null;
     }
 }

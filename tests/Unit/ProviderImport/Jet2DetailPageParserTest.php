@@ -43,6 +43,15 @@ class Jet2DetailPageParserTest extends TestCase
         $this->assertSame(42.1, $packages[0]['three_course_meal_for_two_price']);
         $this->assertSame('07:25-11:25', $packages[0]['outbound_flight_time_text']);
         $this->assertSame('12:20-14:25', $packages[0]['inbound_flight_time_text']);
+
+        $this->assertIsArray($hotel['images'] ?? null);
+        $this->assertCount(19, $hotel['images']);
+        $this->assertSame(
+            'https://media.jet2.com/is/image/jet2/AGP_70178_Iberostar_Malaga_Playa_0223_08',
+            $hotel['images'][0]['url']
+        );
+        $this->assertSame('jet2_json_ld', $hotel['images'][0]['source']);
+        $this->assertSame(0, $hotel['images'][0]['position']);
     }
 
     public function test_it_extracts_expected_fields_from_real_prinsotel_fixture(): void
@@ -77,6 +86,14 @@ class Jet2DetailPageParserTest extends TestCase
         $this->assertSame(48.0, $packages[0]['three_course_meal_for_two_price']);
         $this->assertSame('08:05-12:10', $packages[0]['outbound_flight_time_text']);
         $this->assertSame('13:20-15:35', $packages[0]['inbound_flight_time_text']);
+
+        $this->assertIsArray($hotel['images'] ?? null);
+        $this->assertCount(46, $hotel['images']);
+        $this->assertSame(
+            'https://media.jet2.com/is/image/jet2/PMI_69571_Prinsotel_Alba_0718_02',
+            $hotel['images'][0]['url']
+        );
+        $this->assertSame('jet2_json_ld', $hotel['images'][0]['source']);
     }
 
     public function test_it_uses_provider_fallback_distance_when_airport_is_missing(): void

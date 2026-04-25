@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 class Jet2DetailPageParser implements ProviderDetailPageParser
 {
     use ExtractsEmbeddedJson;
+
     private const BOARD_LABELS = [
         '1' => 'Room Only',
         '2' => 'Bed & Breakfast',
@@ -23,6 +24,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         'SC' => 'Self Catering',
         'RO' => 'Room Only',
     ];
+
     /** @var list<string> */
     private const BOARD_PRIORITY = ['AI', 'FB', 'HB', 'BB', 'SC', 'RO'];
 
@@ -240,6 +242,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
             }
         }
 
+        $jsonLdImageUrls = [];
         $docs = $this->extractJsonDocuments($html);
         foreach ($docs as $doc) {
             $type = strtolower((string) ($doc['@type'] ?? ''));
@@ -267,7 +270,14 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
             if (is_numeric($lng)) {
                 $hotel['longitude'] = (float) $lng;
             }
+            $jsonLdImageUrls = $this->extractHotelImageUrlsFromJsonLd($doc);
             break;
+        }
+
+        $galleryImageUrls = $this->extractJet2GalleryDataLazyUrls($html);
+        $imageMetadata = $this->buildHotelImageMetadataList($jsonLdImageUrls, $galleryImageUrls);
+        if ($imageMetadata !== null) {
+            $hotel['images'] = $imageMetadata;
         }
 
         if (preg_match('/data-resort="([^"]+)"/i', $html, $m)) {
@@ -595,6 +605,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
                 }
                 if (str_contains($item, 'bar') || str_contains($item, 'lounge')) {
                     $bars++;
+
                     continue;
                 }
                 $restaurants++;
@@ -707,6 +718,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         if ($v === '') {
             return null;
         }
+
         return match (true) {
             isset(self::BOARD_LABELS[$v]) => $v,
             str_contains($v, 'ALL') || $v === 'AI' || $v === 'AL' => 'AI',
@@ -1038,5 +1050,90 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
                 $hotel['kids_club_age_min'] = $minAge;
             }
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $doc
+     * @return list<string>
+     */
+    private function extractHotelImageUrlsFromJsonLd(array $doc): array
+    {
+        if (! isset($doc['image'])) {
+            return [];
+        }
+        $raw = $doc['image'];
+        if (is_string($raw) && filter_var($raw, FILTER_VALIDATE_URL)) {
+            return [$raw];
+        }
+        if (! is_array($raw)) {
+            return [];
+        }
+        if (isset($raw['url']) && is_string($raw['url']) && filter_var($raw['url'], FILTER_VALIDATE_URL)) {
+            return [$raw['url']];
+        }
+        $out = [];
+        foreach ($raw as $item) {
+            if (is_string($item) && filter_var($item, FILTER_VALIDATE_URL)) {
+                $out[] = $item;
+            } elseif (is_array($item) && isset($item['url']) && is_string($item['url']) && filter_var($item['url'], FILTER_VALIDATE_URL)) {
+                $out[] = $item['url'];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function extractJet2GalleryDataLazyUrls(string $html): array
+    {
+        if (! preg_match_all('/<img\b[^>]*?class="[^"]*image-galleryV2__fullimage[^"]*"[^>]*>/i', $html, $tags, PREG_SET_ORDER)) {
+            return [];
+        }
+        $urls = [];
+        $seen = [];
+        foreach ($tags as $tagMatch) {
+            $tag = $tagMatch[0];
+            if (! preg_match('/\bdata-lazy="([^"]+)"/i', $tag, $m)) {
+                continue;
+            }
+            $u = $m[1];
+            if (! is_string($u) || ! filter_var($u, FILTER_VALIDATE_URL) || isset($seen[$u])) {
+                continue;
+            }
+            $seen[$u] = true;
+            $urls[] = $u;
+        }
+
+        return $urls;
+    }
+
+    /**
+     * @param  list<string>  $jsonLdUrls
+     * @param  list<string>  $galleryUrls
+     * @return list<array{url: string, source: string, position: int}>|null
+     */
+    private function buildHotelImageMetadataList(array $jsonLdUrls, array $galleryUrls): ?array
+    {
+        $seen = [];
+        $out = [];
+        $pos = 0;
+        foreach ($jsonLdUrls as $u) {
+            if (isset($seen[$u])) {
+                continue;
+            }
+            $seen[$u] = true;
+            $out[] = ['url' => $u, 'source' => 'jet2_json_ld', 'position' => $pos++];
+        }
+        foreach ($galleryUrls as $u) {
+            if (isset($seen[$u])) {
+                continue;
+            }
+            $seen[$u] = true;
+            $out[] = ['url' => $u, 'source' => 'jet2_gallery', 'position' => $pos++];
+        }
+
+        return $out === [] ? null : $out;
     }
 }

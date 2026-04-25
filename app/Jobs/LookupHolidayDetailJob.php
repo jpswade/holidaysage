@@ -2,8 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Models\Hotel;
 use App\Models\ProviderSource;
 use App\Models\SavedHolidaySearchRun;
+use App\Services\Hotels\HotelImageService;
 use App\Services\Normalisation\HolidayOptionNormaliser;
 use App\Services\ProviderImport\ProviderDetailPageParserResolver;
 use GuzzleHttp\Handler\StreamHandler;
@@ -36,6 +38,7 @@ class LookupHolidayDetailJob implements ShouldQueue
     public function handle(
         HolidayOptionNormaliser $normaliser,
         ProviderDetailPageParserResolver $parserResolver,
+        HotelImageService $hotelImageService,
     ): void {
         if ($this->batch() !== null && $this->batch()->cancelled()) {
             return;
@@ -58,10 +61,19 @@ class LookupHolidayDetailJob implements ShouldQueue
         );
 
         $createdIds = [];
+        $hotelIds = [];
         foreach ($packagePayloads as $payload) {
             $signed = $normaliser->normaliseAndSign($payload, $provider);
             $package = $normaliser->upsert($provider, $signed);
             $createdIds[] = $package->id;
+            $hotelIds[$package->hotel_id] = true;
+        }
+
+        foreach (array_keys($hotelIds) as $hotelId) {
+            $hotel = Hotel::query()->find($hotelId);
+            if ($hotel !== null) {
+                $hotelImageService->syncFromMetadata($hotel);
+            }
         }
 
         DB::transaction(function () use ($createdIds): void {

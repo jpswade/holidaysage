@@ -224,6 +224,9 @@ class HolidayOptionNormaliser
                 $hotelData[$key] = $normalised[$key];
             }
         }
+        if (array_key_exists('images', $normalised) && is_array($normalised['images']) && $normalised['images'] !== []) {
+            $hotelData['images'] = $normalised['images'];
+        }
         $packageData = [];
         foreach ($packageKeys as $key) {
             if (array_key_exists($key, $normalised)) {
@@ -236,10 +239,12 @@ class HolidayOptionNormaliser
         foreach ($raw as $key => $value) {
             if (in_array((string) $key, ['property', 'features', 'keySellingPoints', 'distance_to_airport_km', 'introduction_text'], true)) {
                 $hotelRaw[$key] = $value;
+
                 continue;
             }
             if (in_array((string) $key, ['accommodation_options', 'outbound_flight', 'inbound_flight'], true)) {
                 $packageRaw[$key] = $value;
+
                 continue;
             }
             $hotelRaw[$key] = $value;

@@ -4,23 +4,25 @@ namespace Tests\Unit\ViewModels;
 
 use App\Models\HolidayPackage;
 use App\Models\Hotel;
+use App\Models\HotelPhoto;
 use App\Models\ProviderSource;
 use App\Models\ScoredHolidayOption;
 use App\ViewModels\ResultCardViewModel;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ResultCardViewModelTest extends TestCase
 {
-    public function test_it_extracts_image_from_known_hotel_raw_attributes_path(): void
+    public function test_it_uses_structured_hotel_images_json_for_display_url(): void
     {
         $hotel = new Hotel([
             'hotel_name' => 'Prinsotel Alba',
             'destination_name' => 'Majorca',
-            'raw_attributes' => [
-                'hotel_extra' => [
-                    'property' => [
-                        'image' => 'https://media.jet2.com/is/image/jet2/PMI_69571_Prinsotel_Alba_0718_02',
-                    ],
+            'images' => [
+                [
+                    'url' => 'https://media.jet2.com/is/image/jet2/PMI_69571_Prinsotel_Alba_0718_02',
+                    'source' => 'jet2_json_ld',
+                    'position' => 0,
                 ],
             ],
         ]);
@@ -52,73 +54,37 @@ class ResultCardViewModelTest extends TestCase
         );
     }
 
-    public function test_it_extracts_image_from_property_images_array_first_element(): void
+    public function test_it_prefers_locally_cached_hotel_photo_url(): void
     {
-        $expected = 'https://media.jet2.com/is/image/jet2/AGP_70178_Iberostar_Malaga_Playa_0223_08';
+        Storage::fake('public');
+        $path = 'hotel-photos/9/test-hash.jpg';
+        Storage::disk('public')->put($path, 'x');
+
         $hotel = new Hotel([
-            'hotel_name' => 'Iberostar Waves Malaga Playa',
-            'destination_name' => 'Torrox',
-            'raw_attributes' => [
-                'hotel_extra' => [
-                    'property' => [
-                        'images' => [
-                            $expected,
-                            'https://media.jet2.com/is/image/jet2/OTHER_SHOULD_NOT_WIN',
-                        ],
-                    ],
-                ],
+            'id' => 9,
+            'hotel_name' => 'Test',
+            'destination_name' => 'Here',
+            'images' => [
+                ['url' => 'https://media.jet2.com/is/image/jet2/remote_only', 'source' => 'jet2_json_ld', 'position' => 0],
             ],
         ]);
-        $provider = new ProviderSource(['name' => 'Jet2']);
-        $package = new HolidayPackage([
-            'nights' => 7,
-            'price_total' => 2000,
-            'price_per_person' => 1000,
-            'provider_url' => '/beach/spain/test',
+        $photo = new HotelPhoto([
+            'hotel_id' => 9,
+            'position' => 0,
+            'external_url' => 'https://media.jet2.com/is/image/jet2/cached',
+            'external_url_hash' => hash('sha256', 'https://media.jet2.com/is/image/jet2/cached'),
+            'file_path' => $path,
+            'status' => HotelPhoto::STATUS_CACHED,
         ]);
+        $hotel->setRelation('photos', collect([$photo]));
+
+        $package = new HolidayPackage(['nights' => 7, 'price_total' => 100, 'price_per_person' => 50, 'provider_url' => '/x']);
         $package->setRelation('hotel', $hotel);
-        $package->setRelation('providerSource', $provider);
-
-        $scored = new ScoredHolidayOption;
-        $scored->id = 2;
-        $scored->overall_score = 8.0;
-        $scored->rank_position = 2;
-        $scored->is_disqualified = false;
-        $scored->recommendation_reasons = [];
-        $scored->warning_flags = [];
-        $scored->setRelation('holidayPackage', $package);
-
-        $viewModel = ResultCardViewModel::fromModel($scored);
-
-        $this->assertSame($expected, $viewModel->imageUrl);
-    }
-
-    public function test_it_does_not_guess_image_from_random_nested_keys(): void
-    {
-        $hotel = new Hotel([
-            'hotel_name' => 'Prinsotel Alba',
-            'destination_name' => 'Majorca',
-            'raw_attributes' => [
-                'hotel_extra' => [
-                    'meta' => [
-                        'unexpected_image_field' => 'https://media.jet2.com/is/image/jet2/SHOULD_NOT_BE_USED',
-                    ],
-                ],
-            ],
-        ]);
-        $provider = new ProviderSource(['name' => 'Jet2']);
-        $package = new HolidayPackage([
-            'nights' => 7,
-            'price_total' => 1847,
-            'price_per_person' => 924,
-            'provider_url' => '/beach/spain/test',
-        ]);
-        $package->setRelation('hotel', $hotel);
-        $package->setRelation('providerSource', $provider);
+        $package->setRelation('providerSource', new ProviderSource(['name' => 'Jet2']));
 
         $scored = new ScoredHolidayOption;
         $scored->id = 1;
-        $scored->overall_score = 9.4;
+        $scored->overall_score = 8.0;
         $scored->rank_position = 1;
         $scored->is_disqualified = false;
         $scored->recommendation_reasons = [];
@@ -127,6 +93,30 @@ class ResultCardViewModelTest extends TestCase
 
         $viewModel = ResultCardViewModel::fromModel($scored);
 
-        $this->assertNull($viewModel->imageUrl);
+        $this->assertSame(Storage::disk('public')->url($path), $viewModel->imageUrl);
+    }
+
+    public function test_it_returns_null_when_no_modelled_images(): void
+    {
+        $hotel = new Hotel([
+            'hotel_name' => 'X',
+            'destination_name' => 'Y',
+        ]);
+        $hotel->setRelation('photos', collect());
+
+        $package = new HolidayPackage(['nights' => 7, 'price_total' => 1, 'price_per_person' => 1, 'provider_url' => '/x']);
+        $package->setRelation('hotel', $hotel);
+        $package->setRelation('providerSource', new ProviderSource(['name' => 'Jet2']));
+
+        $scored = new ScoredHolidayOption;
+        $scored->id = 1;
+        $scored->overall_score = 5.0;
+        $scored->rank_position = 1;
+        $scored->is_disqualified = false;
+        $scored->recommendation_reasons = [];
+        $scored->warning_flags = [];
+        $scored->setRelation('holidayPackage', $package);
+
+        $this->assertNull(ResultCardViewModel::fromModel($scored)->imageUrl);
     }
 }

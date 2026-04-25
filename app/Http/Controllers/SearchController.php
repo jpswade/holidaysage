@@ -88,7 +88,7 @@ class SearchController extends Controller
         $rows = collect();
         if ($latestRun) {
             $rows = $latestRun->scoredOptions()
-                ->with(['holidayPackage.hotel', 'holidayPackage.providerSource'])
+                ->with(['holidayPackage.hotel.photos', 'holidayPackage.providerSource'])
                 ->orderByRaw('rank_position IS NULL')
                 ->orderBy('rank_position')
                 ->orderByDesc('overall_score')
@@ -113,7 +113,7 @@ class SearchController extends Controller
     {
         abort_unless($scoredOption->saved_holiday_search_id === $search->id, 404);
 
-        $scoredOption->load(['holidayPackage.hotel', 'holidayPackage.providerSource']);
+        $scoredOption->load(['holidayPackage.hotel.photos', 'holidayPackage.providerSource']);
         $card = ResultCardViewModel::fromModel($scoredOption);
         $package = $scoredOption->holidayPackage;
         $provider = $package?->providerSource;
