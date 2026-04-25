@@ -8,6 +8,7 @@ use App\Models\ProviderSource;
 use App\Models\SavedHolidaySearch;
 use App\Services\Imports\ImportUrlParserRegistry;
 use App\Services\Providers\ProviderSourceResolver;
+use App\Support\SavedHolidaySearchDisplayName;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
@@ -51,7 +52,6 @@ class CreateSavedHolidaySearchFromUrlAction
      */
     private function mergeWithDefaults(string $url, ProviderSource $provider, array $extracted, bool $isUpdate): array
     {
-        $name = $provider->name.' Search';
         $baseSlug = Str::slug('import-'.$provider->key.'-'.Str::random(8));
 
         $start = $extracted['travel_start_date'] ?? null;
@@ -66,6 +66,15 @@ class CreateSavedHolidaySearchFromUrlAction
             $nights = $maxNights > 0 ? $maxNights : 7;
             $end = $d->copy()->addDays($nights)->toDateString();
         }
+
+        $extractedForName = array_merge($extracted, [
+            'travel_start_date' => $start,
+            'travel_end_date' => $end,
+            'duration_min_nights' => $minNights,
+            'duration_max_nights' => $maxNights,
+            'departure_airport_code' => $extracted['departure_airport_code'] ?? 'MAN',
+        ]);
+        $name = SavedHolidaySearchDisplayName::fromExtracted($extractedForName, $provider);
 
         return array_filter([
             'name' => $name,

@@ -11,6 +11,8 @@ use App\Models\SavedHolidaySearch;
 use App\Models\SavedHolidaySearchRun;
 use App\Models\ScoredHolidayOption;
 use App\Services\Imports\ImportUrlParserRegistry;
+use App\Services\Providers\ProviderSourceResolver;
+use App\Support\SavedHolidaySearchDisplayName;
 use App\ViewModels\ResultCardViewModel;
 use App\ViewModels\SearchSummaryViewModel;
 use App\ViewModels\TopPickViewModel;
@@ -132,8 +134,11 @@ class SearchController extends Controller
         return redirect()->route('searches.show', $search);
     }
 
-    public function import(ImportSearchUrlRequest $request, ImportUrlParserRegistry $parsers): JsonResponse
-    {
+    public function import(
+        ImportSearchUrlRequest $request,
+        ImportUrlParserRegistry $parsers,
+        ProviderSourceResolver $providerResolver,
+    ): JsonResponse {
         $url = (string) $request->validated('url');
 
         try {
@@ -145,9 +150,12 @@ class SearchController extends Controller
             ], 422);
         }
 
+        $provider = $providerResolver->forUrl($url);
+
         return response()->json([
             'message' => 'Import criteria extracted.',
             'criteria' => $criteria,
+            'suggested_name' => SavedHolidaySearchDisplayName::fromExtracted($criteria, $provider),
         ]);
     }
 

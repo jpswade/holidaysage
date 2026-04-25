@@ -135,6 +135,18 @@
                             input.value = String(value);
                         }
                     });
+                    const nameInput = document.querySelector('[name="name"]');
+                    const suggested = payload.suggested_name ? String(payload.suggested_name).trim() : '';
+                    if (nameInput && suggested) {
+                        const current = String(nameInput.value || '').trim();
+                        if (
+                            current === '' ||
+                            /^import\b/i.test(current) ||
+                            current.includes('(www.')
+                        ) {
+                            nameInput.value = suggested;
+                        }
+                    }
                     message.textContent = payload.message ?? 'Import complete.';
                 } catch (error) {
                     message.textContent = 'Unable to import from this URL.';

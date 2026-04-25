@@ -3,6 +3,7 @@
 namespace Tests\Feature\HolidaySage;
 
 use App\Enums\SavedHolidaySearchRunStatus;
+use App\Models\SavedHolidaySearch;
 use App\Models\SavedHolidaySearchRun;
 use App\Models\ScoredHolidayOption;
 use Database\Seeders\ProviderSourceSeeder;
@@ -120,6 +121,44 @@ class HolidaySageRunCommandTest extends TestCase
         $this->artisan('holidaysage:run', [
             'url' => 'not-a-valid-url',
         ])->assertFailed();
+    }
+
+    public function test_command_refreshes_existing_search_by_id_on_sync(): void
+    {
+        $this->seed(ProviderSourceSeeder::class);
+        Config::set('holidaysage.import_use_stub', true);
+
+        $this->artisan('holidaysage:run', [
+            'url' => $this->searchResultsUrl(),
+            '--sync' => true,
+        ])->assertSuccessful();
+
+        $search = SavedHolidaySearch::query()->firstOrFail();
+        $runsAfterFirst = SavedHolidaySearchRun::query()->count();
+
+        $this->artisan('holidaysage:run', [
+            '--search' => (string) $search->id,
+            '--sync' => true,
+        ])->assertSuccessful();
+
+        $this->assertGreaterThan($runsAfterFirst, SavedHolidaySearchRun::query()->count());
+    }
+
+    public function test_command_rejects_url_and_search_together(): void
+    {
+        $this->seed(ProviderSourceSeeder::class);
+
+        $this->artisan('holidaysage:run', [
+            'url' => $this->searchResultsUrl(),
+            '--search' => '1',
+        ])->assertFailed();
+    }
+
+    public function test_command_rejects_missing_url_and_search(): void
+    {
+        $this->seed(ProviderSourceSeeder::class);
+
+        $this->artisan('holidaysage:run', [])->assertFailed();
     }
 
     private function searchResultsUrl(): string

@@ -7,6 +7,7 @@ use App\Enums\SavedHolidaySearchRunType;
 use App\Jobs\RefreshSavedHolidaySearchJob;
 use App\Models\HolidayPackage;
 use App\Models\Hotel;
+use App\Models\ProviderSource;
 use App\Models\SavedHolidaySearch;
 use App\Models\SavedHolidaySearchRun;
 use App\Models\ScoredHolidayOption;
@@ -85,6 +86,11 @@ class FrontendCustomerPagesTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('criteria.departure_airport_code', 'MAN');
         $response->assertJsonPath('criteria.duration_min_nights', 10);
+        $payload = $response->json();
+        $this->assertArrayHasKey('suggested_name', $payload);
+        $this->assertIsString($payload['suggested_name']);
+        $this->assertStringContainsString('MAN', $payload['suggested_name']);
+        $this->assertStringContainsString('Jet2', $payload['suggested_name']);
     }
 
     public function test_refresh_endpoint_dispatches_manual_refresh_job(): void
@@ -114,7 +120,7 @@ class FrontendCustomerPagesTest extends TestCase
     private function seedScoredSearch(): SavedHolidaySearch
     {
         $this->seed(ProviderSourceSeeder::class);
-        $provider = \App\Models\ProviderSource::query()->where('key', 'jet2')->firstOrFail();
+        $provider = ProviderSource::query()->where('key', 'jet2')->firstOrFail();
 
         $search = SavedHolidaySearch::query()->create([
             'name' => 'Summer Family Holiday',

@@ -8,6 +8,8 @@ use App\Models\HolidayPackage;
 use App\Models\SavedHolidaySearch;
 use App\Models\SavedHolidaySearchRun;
 use App\Models\ScoredHolidayOption;
+use App\Services\Providers\ProviderSourceResolver;
+use App\Support\SavedHolidaySearchDisplayName;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -25,7 +27,7 @@ class ScoreHolidayOptionsForSearchJob implements ShouldQueue
         public int $runId,
     ) {}
 
-    public function handle(HolidayScorer $scorer): void
+    public function handle(HolidayScorer $scorer, ProviderSourceResolver $providerResolver): void
     {
         $search = SavedHolidaySearch::query()->find($this->searchId);
         $run = SavedHolidaySearchRun::query()->find($this->runId);
@@ -110,6 +112,15 @@ class ScoreHolidayOptionsForSearchJob implements ShouldQueue
                 $search->last_imported_at = now();
             }
             $search->next_refresh_due_at = now()->addDay();
+            try {
+                $provider = $providerResolver->forSearch($search);
+                if (SavedHolidaySearchDisplayName::shouldAutoReplaceStoredName($search->name)
+                    || SavedHolidaySearchDisplayName::isGenericProviderSearchName($search->name, $provider)) {
+                    $search->name = SavedHolidaySearchDisplayName::fromSavedSearch($search, $provider);
+                }
+            } catch (Throwable) {
+                // Missing provider URL or unknown host: keep existing name.
+            }
             $search->save();
 
             Log::info('holidaysage.score.done', [
