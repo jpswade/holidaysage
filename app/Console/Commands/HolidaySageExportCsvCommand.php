@@ -26,6 +26,8 @@ class HolidaySageExportCsvCommand extends Command
         'SC' => 'Self Catering',
         'RO' => 'Room Only',
     ];
+    /** @var list<string> */
+    private const BOARD_PRIORITY = ['AI', 'FB', 'HB', 'BB', 'SC', 'RO'];
 
     protected $signature = 'holidaysage:export-csv
                             {--path= : Output CSV path (defaults to storage/app/exports/holidaysage-output.csv)}
@@ -115,7 +117,12 @@ class HolidaySageExportCsvCommand extends Command
             ->when($runPackageIds !== null && $runPackageIds !== [], fn (Builder $q) => $q->whereIn('holiday_packages.id', $runPackageIds))
             ->orderBy('holiday_packages.id')
             ->get();
+        $hotelBoardById = [];
         if ($runId !== null) {
+            $hotelBoardById = $packages
+                ->groupBy('hotel_id')
+                ->map(fn ($group) => $this->highestBoardLabelForPackages($group->all()))
+                ->all();
             $packages = $packages
                 ->sortBy([
                     fn ($a, $b) => ((float) ($b->getAttribute('overall_score') ?? -INF)) <=> ((float) ($a->getAttribute('overall_score') ?? -INF)),
@@ -153,7 +160,8 @@ class HolidaySageExportCsvCommand extends Command
                 'flight_time_hours_est' => $this->formatHoursEstimate($package->flight_time_hours_est),
                 'transfer_time_mins_est' => $package->transfer_minutes,
                 'transfer_type' => $package->transfer_type ?? '',
-                'board_recommended' => $this->boardLabel($package->board_recommended ?: $package->board_type),
+                'board_recommended' => $hotelBoardById[$package->hotel_id]
+                    ?? $this->boardLabel($package->board_recommended ?: $package->board_type),
                 'beachfront' => $this->boolToCsv($hotel->distance_to_beach_meters === 0 ? true : null),
                 'distance_to_beach_m' => $hotel->distance_to_beach_meters,
                 'kids_club' => $this->boolToCsv($hotel->has_kids_club),
@@ -265,6 +273,46 @@ class HolidaySageExportCsvCommand extends Command
             str_contains($v, 'SELF') => self::BOARD_LABELS['SC'],
             str_contains($v, 'ROOM ONLY') => self::BOARD_LABELS['RO'],
             default => $value,
+        };
+    }
+
+    /**
+     * @param  list<HolidayPackage>  $packages
+     */
+    private function highestBoardLabelForPackages(array $packages): ?string
+    {
+        $codes = [];
+        foreach ($packages as $package) {
+            $code = $this->normaliseBoardCode($package->board_recommended ?: $package->board_type);
+            if ($code !== null) {
+                $codes[] = $code;
+            }
+        }
+        foreach (self::BOARD_PRIORITY as $code) {
+            if (in_array($code, $codes, true)) {
+                return self::BOARD_LABELS[$code] ?? null;
+            }
+        }
+
+        return null;
+    }
+
+    private function normaliseBoardCode(?string $value): ?string
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+        $v = strtoupper(trim($value));
+
+        return match (true) {
+            isset(self::BOARD_LABELS[$v]) => $v,
+            str_contains($v, 'ALL') || $v === 'AL' => 'AI',
+            str_contains($v, 'FULL') => 'FB',
+            str_contains($v, 'HALF') => 'HB',
+            str_contains($v, 'BREAKFAST') => 'BB',
+            str_contains($v, 'SELF') => 'SC',
+            str_contains($v, 'ROOM ONLY') => 'RO',
+            default => null,
         };
     }
 

@@ -347,5 +347,6 @@ class HolidaySageExportCsvCommandTest extends TestCase
         $this->assertCount(2, $csv); // header + one chosen row for hotel
         $this->assertStringContainsString(',5000,', (string) $csv[1]); // packageA (higher score)
         $this->assertStringNotContainsString(',4800,', (string) $csv[1]);
+        $this->assertStringContainsString('All Inclusive', (string) $csv[1]); // highest board available across hotel packages
     }
 }
