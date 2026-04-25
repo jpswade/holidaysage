@@ -2,6 +2,9 @@
 name: frontend-customer-ui-plan
 overview: Implement the customer-facing HolidaySage frontend by translating the v0 journey into Laravel Blade/Tailwind pages backed by the saved-search domain and routes already defined in the build specification.
 todos:
+  - id: git-pr-workflow
+    content: Implement this UI plan on a dedicated branch with incremental commits, then push and open a PR at completion.
+    status: pending
   - id: frontend-route-map
     content: Add and align all customer-facing web routes/controllers for landing, create, index, detail, results, import, and refresh flows.
     status: pending
@@ -326,19 +329,63 @@ Offer complete ranked comparison without losing recommendation context.
 
 ## Frontend Data Binding Plan
 - Use a single presenter/formatter for search summary text from `saved_holiday_searches`.
-- Build result card view model from `scored_holiday_options` + `holiday_options`.
+- Build result card view model from `scored_holiday_options` + `holiday_options` + enriched `hotels` fields.
 - Top pick selection:
   - highest-ranked non-disqualified option.
   - tie-breakers: score, lower price, shorter transfer, stronger family fit.
 - Display deterministic fallback copy when recommendation reasons/warnings are empty.
 
+## Enriched Data UI Plan (Post-Import Upgrade)
+- Expand card/summary mappers to consume newly imported package and hotel enrichment fields where available.
+- Prioritise these additions in ranked cards and detail pages:
+  - **Hotel proof signals**: `review_score`, `review_count`, star rating, location granularity (resort/area), distance-to-airport.
+  - **Facility richness**: counts (`restaurants_count`, `bars_count`, `pools_count`, `sports_leisure_count`) and tri-state accessibility indicators (`has_lift`, `ground_floor_available`, `accessibility_issues`).
+  - **Package context**: `board_recommended`, outbound/inbound flight time text, local price signals (`local_beer_price`, `three_course_meal_for_two_price`) where relevant.
+- Introduce “data-confidence” display rules:
+  - show enriched facts only when source-backed and non-null.
+  - if unknown, hide quietly (no “N/A” clutter on consumer pages).
+  - keep comparison rows aligned so cards remain easy to scan.
+- Add optional “More details” expandable section on result cards for long-tail parsed attributes held in `raw_attributes` (phase-gated; off by default for MVP first release).
+- Ensure scoring explanation copy can reference enriched factors when present (for example better location/facilities evidence), without making enrichment mandatory for recommendation rendering.
+
+## Data-to-UI Field Priority Matrix
+- **Always show (if present in base data):**
+  - provider, hotel name, destination, score, price, nights, board, flight/transfer mins, recommendation summary.
+- **Promote into primary card chips when enriched fields exist:**
+  - review score/count, key facility counts, accessibility hints, airport distance.
+- **Keep in secondary/expanded details:**
+  - local cost indicators, verbose intro snippets, long-tail extras.
+- **Never block rendering on enrichment nulls:**
+  - page must remain fully usable with base import payload only.
+
+## Branch, Commit, Push, PR Workflow (Execution Constraint)
+- Implementation must run on a dedicated branch created from latest target base branch (expected `main` unless changed before execution).
+- Suggested branch naming: `feature/frontend-customer-ui-v0-parity`.
+- Commit policy during execution:
+  - make small, reviewable commits at each completed phase.
+  - recommended commit slices:
+    1. shell/layout + style tokens + icon setup
+    2. landing + create page
+    3. saved searches index
+    4. search detail + full results
+    5. enriched-data display wiring
+    6. tests and accessibility polish
+- Push policy:
+  - push branch only after all planned phases and tests pass locally.
+  - then open a PR with concise summary and test checklist.
+- PR must clearly call out:
+  - v0 styling parity decisions,
+  - Lucide icon implementation choice,
+  - enriched-field UI additions and fallback behaviour for nulls.
+
 ## Delivery Phases
-1. **Visual foundation**: shell, typography, colour tokens, shared components.
+1. **Branch setup + visual foundation**: create feature branch, shell, typography, colour tokens, shared components, icon setup.
 2. **Landing + Create page**: hero/CTA flow and full search form UX.
 3. **Saved Searches index**: card listing, statuses, trend and freshness signals.
 4. **Search Detail + Results**: top pick, ranked cards, reasons/warnings, full list.
-5. **Interaction polish**: import, refresh feedback, empty/loading/error states.
-6. **QA and accessibility**: responsive passes, keyboard flow, feature tests.
+5. **Enriched data integration**: surface upgraded hotel/package fields with graceful null fallbacks.
+6. **Interaction polish**: import, refresh feedback, empty/loading/error states.
+7. **QA, commit finalisation, push, PR**: responsive/accessibility checks, tests, final push, PR opening.
 
 ## Test & Acceptance Plan
 - Feature tests for:
@@ -347,12 +394,15 @@ Offer complete ranked comparison without losing recommendation context.
   - saved searches index renders summaries
   - search detail shows top pick + ranked shortlist
   - full results page renders ranked cards consistently
+  - enriched hotel/package facts render only when source data exists
+  - enriched nulls do not regress card layout or create noisy placeholders
   - import endpoint returns prefill payload for supported URL
   - refresh endpoint dispatches run and returns UI-safe response
 - Acceptance checks:
   - user can create a usable search in under two minutes
   - every result card clearly answers “why selected” and “trade-offs”
   - search freshness/status is visible without opening developer tools
+  - enriched fields improve trust/readability without increasing visual clutter
 
 ## Architecture View
 ```mermaid
