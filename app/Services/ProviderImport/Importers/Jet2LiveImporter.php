@@ -8,8 +8,6 @@ use App\Models\SavedHolidaySearch;
 use App\Services\ProviderImport\Importers\Concerns\ExtractsEmbeddedJson;
 use App\Services\ProviderImport\ProviderImportResult;
 use Carbon\Carbon;
-use GuzzleHttp\Handler\StreamHandler;
-use GuzzleHttp\HandlerStack;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -76,7 +74,6 @@ class Jet2LiveImporter implements ProviderHttpImporter
 
     private function requestWithBrowserHeaders(string $url, bool $isApi): Response
     {
-        $handler = HandlerStack::create(new StreamHandler);
         $headers = [
             'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
             'Accept-Language' => 'en-GB,en-US;q=0.9,en;q=0.8,pt;q=0.7',
@@ -99,9 +96,6 @@ class Jet2LiveImporter implements ProviderHttpImporter
             ->withHeaders($headers)
             ->connectTimeout(10)
             ->timeout(20)
-            ->withOptions([
-                'handler' => $handler,
-            ])
             ->get($url);
     }
 

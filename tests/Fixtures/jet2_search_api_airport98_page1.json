@@ -1,0 +1,38 @@
+{
+  "results": [
+    {
+      "name": "Fixture Hotel Ibiza",
+      "bookingUrl": "/beach/spain/ibiza/san-antonio/fixture-hotel",
+      "selectedFlightId": 1001,
+      "property": {
+        "id": "fixture-hotel-property"
+      },
+      "accommodationOptions": [
+        {
+          "boardId": "AI",
+          "priceOptions": [
+            {
+              "flightId": 1001,
+              "totalPrice": 2499,
+              "pricePerPerson": 833
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "flights": [
+    {
+      "flightId": 1001,
+      "outbound": {
+        "arrivalAirportCode": "IBZ",
+        "departureDateTimeLocal": "2026-07-25T08:25:00",
+        "arrivalDateTimeLocal": "2026-07-25T12:00:00"
+      },
+      "inbound": {
+        "departureDateTimeLocal": "2026-08-04T10:45:00",
+        "arrivalDateTimeLocal": "2026-08-04T12:25:00"
+      }
+    }
+  ]
+}
