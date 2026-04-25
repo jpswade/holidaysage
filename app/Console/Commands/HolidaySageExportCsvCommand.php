@@ -140,7 +140,7 @@ class HolidaySageExportCsvCommand extends Command
                 'resort' => $hotel->resort_name,
                 'airport' => $package->airport_code,
                 'distance_to_airport_km' => $hotel->distance_to_airport_km,
-                'private_transfer_time_by_distance_est_mins' => '',
+                'private_transfer_time_by_distance_est_mins' => $this->privateTransferMinutesByDistance($hotel->distance_to_airport_km),
                 'flight_time_hours_est' => '',
                 'transfer_time_mins_est' => $package->transfer_minutes,
                 'transfer_type' => '',
@@ -257,5 +257,16 @@ class HolidaySageExportCsvCommand extends Command
             str_contains($v, 'ROOM ONLY') => self::BOARD_LABELS['RO'],
             default => $value,
         };
+    }
+
+    private function privateTransferMinutesByDistance(mixed $distanceKm): string
+    {
+        if (! is_numeric($distanceKm)) {
+            return '';
+        }
+
+        $minutes = (int) round(((float) $distanceKm / 50) * 60);
+
+        return (string) $minutes;
     }
 }

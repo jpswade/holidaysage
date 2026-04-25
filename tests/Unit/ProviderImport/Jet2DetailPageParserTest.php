@@ -2,14 +2,25 @@
 
 namespace Tests\Unit\ProviderImport;
 
+use App\Models\Airport;
 use App\Services\ProviderImport\DetailParsers\Jet2DetailPageParser;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class Jet2DetailPageParserTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_it_extracts_expected_fields_from_real_iberostar_fixture(): void
     {
-        $parser = new Jet2DetailPageParser;
+        Airport::query()->create([
+            'iata_code' => 'AGP',
+            'name' => 'Malaga',
+            'latitude' => 36.6749,
+            'longitude' => -4.4991,
+        ]);
+
+        $parser = app(Jet2DetailPageParser::class);
         $candidate = $this->candidate();
         $html = $this->fixture('jet2_detail_iberostar_waves_malaga_playa.html');
         $parsed = $parser->parse($candidate, $html);
@@ -36,7 +47,14 @@ class Jet2DetailPageParserTest extends TestCase
 
     public function test_it_extracts_expected_fields_from_real_prinsotel_fixture(): void
     {
-        $parser = new Jet2DetailPageParser;
+        Airport::query()->create([
+            'iata_code' => 'AGP',
+            'name' => 'Malaga',
+            'latitude' => 36.6749,
+            'longitude' => -4.4991,
+        ]);
+
+        $parser = app(Jet2DetailPageParser::class);
         $candidate = $this->candidate();
         $html = $this->fixture('jet2_detail_prinsotel_alba.html');
         $parsed = $parser->parse($candidate, $html);
@@ -59,6 +77,37 @@ class Jet2DetailPageParserTest extends TestCase
         $this->assertSame(48.0, $packages[0]['three_course_meal_for_two_price']);
         $this->assertSame('08:05-12:10', $packages[0]['outbound_flight_time_text']);
         $this->assertSame('13:20-15:35', $packages[0]['inbound_flight_time_text']);
+    }
+
+    public function test_it_uses_provider_fallback_distance_when_airport_is_missing(): void
+    {
+        $parser = app(Jet2DetailPageParser::class);
+        $candidate = $this->candidate();
+        $candidate['airport_code'] = 'ZZZ';
+        $candidate['raw_attributes']['distance_to_airport_km'] = 77.7;
+
+        $parsed = $parser->parse($candidate, '<html></html>');
+
+        $this->assertSame(77.7, $parsed['hotel']['distance_to_airport_km']);
+    }
+
+    public function test_it_uses_provider_fallback_distance_when_hotel_coordinates_are_missing(): void
+    {
+        Airport::query()->create([
+            'iata_code' => 'AGP',
+            'name' => 'Malaga',
+            'latitude' => 36.6749,
+            'longitude' => -4.4991,
+        ]);
+
+        $parser = app(Jet2DetailPageParser::class);
+        $candidate = $this->candidate();
+        $candidate['raw_attributes']['property']['mapLocation'] = [];
+        $candidate['raw_attributes']['distance_to_airport_km'] = 88.8;
+
+        $parsed = $parser->parse($candidate, '<html></html>');
+
+        $this->assertSame(88.8, $parsed['hotel']['distance_to_airport_km']);
     }
 
     private function fixture(string $name): string

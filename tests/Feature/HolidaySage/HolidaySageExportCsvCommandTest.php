@@ -34,6 +34,7 @@ class HolidaySageExportCsvCommandTest extends TestCase
             'destination_country' => 'Spain',
             'has_lift' => true,
             'rooms_count' => 200,
+            'distance_to_airport_km' => 45.0,
         ]);
         $package = HolidayPackage::query()->create([
             'provider_source_id' => $provider->id,
@@ -97,6 +98,12 @@ class HolidaySageExportCsvCommandTest extends TestCase
         $this->assertStringContainsString('hotel_name', (string) $csv[0]);
         $this->assertStringContainsString('Test Hotel', (string) $csv[1]);
         $this->assertStringContainsString('All Inclusive', (string) $csv[1]);
+
+        $headers = str_getcsv((string) $csv[0]);
+        $values = str_getcsv((string) $csv[1]);
+        $row = array_combine($headers, $values);
+        $this->assertNotFalse($row);
+        $this->assertSame('54', (string) ($row['private_transfer_time_by_distance_est_mins'] ?? ''));
     }
 
     public function test_it_filters_to_specific_run_when_run_id_is_provided(): void

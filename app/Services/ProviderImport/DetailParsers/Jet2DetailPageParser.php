@@ -3,6 +3,7 @@
 namespace App\Services\ProviderImport\DetailParsers;
 
 use App\Contracts\ProviderDetailPageParser;
+use App\Services\Airports\AirportLookupService;
 use App\Services\ProviderImport\Importers\Concerns\ExtractsEmbeddedJson;
 use Illuminate\Support\Str;
 
@@ -23,21 +24,9 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         'RO' => 'Room Only',
     ];
 
-    /** @var array<string, array{lat: float, lng: float}> */
-    private const AIRPORT_COORDINATES = [
-        'AGP' => ['lat' => 36.6749, 'lng' => -4.4991],
-        'MAH' => ['lat' => 39.8626, 'lng' => 4.2186],
-        'PMI' => ['lat' => 39.5517, 'lng' => 2.7388],
-        'SPU' => ['lat' => 43.5389, 'lng' => 16.2980],
-        'ALC' => ['lat' => 38.2822, 'lng' => -0.5582],
-        'SKG' => ['lat' => 40.5197, 'lng' => 22.9709],
-        'IBZ' => ['lat' => 38.8729, 'lng' => 1.3731],
-        'TFS' => ['lat' => 28.0445, 'lng' => -16.5725],
-        'RHO' => ['lat' => 36.4054, 'lng' => 28.0862],
-        'ACE' => ['lat' => 28.9455, 'lng' => -13.6052],
-        'AYT' => ['lat' => 36.8993, 'lng' => 30.8014],
-        'FAO' => ['lat' => 37.0144, 'lng' => -7.9659],
-    ];
+    public function __construct(
+        private readonly AirportLookupService $airportLookup,
+    ) {}
 
     /**
      * @param  array<string,mixed>  $candidate
@@ -667,10 +656,11 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         if ($hotelLat === null || $hotelLng === null) {
             return $fallback;
         }
-        if (! isset(self::AIRPORT_COORDINATES[$airportCode])) {
+        $airport = $this->airportLookup->coordinatesForIata($airportCode);
+        if ($airport === null) {
             return $fallback;
         }
-        $airport = self::AIRPORT_COORDINATES[$airportCode];
+
         $km = $this->haversineKm($hotelLat, $hotelLng, $airport['lat'], $airport['lng']);
 
         return round($km, 2);
