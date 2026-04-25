@@ -25,7 +25,8 @@ class FrontendCustomerPagesTest extends TestCase
         $response = $this->get(route('home'));
 
         $response->assertOk();
-        $response->assertSee('Find your perfect holiday, effortlessly');
+        $response->assertSeeText('Find your perfect');
+        $response->assertSeeText('holiday, effortlessly');
         $response->assertSee(route('searches.create'));
         $response->assertSee(route('searches.index'));
     }
