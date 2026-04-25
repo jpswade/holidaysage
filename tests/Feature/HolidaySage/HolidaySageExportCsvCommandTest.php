@@ -33,6 +33,12 @@ class HolidaySageExportCsvCommandTest extends TestCase
             'destination_name' => 'Majorca',
             'destination_country' => 'Spain',
             'has_lift' => true,
+            'gym' => true,
+            'near_shops' => true,
+            'distance_to_shops_meters' => 250,
+            'cots_available' => true,
+            'introduction_snippet' => 'Lovely family hotel near the beach.',
+            'style_keywords' => 'family; beach',
             'rooms_count' => 200,
             'distance_to_airport_km' => 45.0,
         ]);
@@ -53,6 +59,8 @@ class HolidaySageExportCsvCommandTest extends TestCase
             'price_total' => 3500,
             'price_per_person' => 875,
             'currency' => 'GBP',
+            'flight_time_hours_est' => 4.5,
+            'transfer_type' => 'coach',
             'signature_hash' => hash('sha256', 'opt-1'),
         ]);
         $search = SavedHolidaySearch::query()->create([
@@ -104,6 +112,14 @@ class HolidaySageExportCsvCommandTest extends TestCase
         $row = array_combine($headers, $values);
         $this->assertNotFalse($row);
         $this->assertSame('54', (string) ($row['private_transfer_time_by_distance_est_mins'] ?? ''));
+        $this->assertSame('4.50', (string) ($row['flight_time_hours_est'] ?? ''));
+        $this->assertSame('coach', (string) ($row['transfer_type'] ?? ''));
+        $this->assertSame('TRUE', (string) ($row['gym'] ?? ''));
+        $this->assertSame('TRUE', (string) ($row['near_shops'] ?? ''));
+        $this->assertSame('250', (string) ($row['distance_to_shops_m'] ?? ''));
+        $this->assertSame('TRUE', (string) ($row['cots_available'] ?? ''));
+        $this->assertSame('Lovely family hotel near the beach.', (string) ($row['introduction_snippet'] ?? ''));
+        $this->assertSame('family; beach', (string) ($row['style_keywords'] ?? ''));
     }
 
     public function test_it_filters_to_specific_run_when_run_id_is_provided(): void

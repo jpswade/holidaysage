@@ -156,11 +156,29 @@ class HolidayOptionNormaliser
             'review_count',
             'is_family_friendly',
             'has_kids_club',
+            'kids_club_age_min',
             'has_waterpark',
             'has_family_rooms',
+            'play_area',
+            'evening_entertainment',
+            'kids_disco',
+            'gym',
+            'spa',
+            'adults_only_area',
+            'promenade',
+            'near_shops',
+            'distance_to_shops_meters',
+            'cafes_bars',
+            'distance_to_cafes_bars_meters',
+            'harbour',
             'has_lift',
             'ground_floor_available',
             'accessibility_issues',
+            'steps_count',
+            'accessibility_notes',
+            'cots_available',
+            'introduction_snippet',
+            'style_keywords',
             'distance_to_beach_meters',
             'distance_to_centre_meters',
             'distance_to_airport_km',
@@ -192,6 +210,8 @@ class HolidayOptionNormaliser
             'flight_outbound_duration_minutes',
             'flight_inbound_duration_minutes',
             'transfer_minutes',
+            'flight_time_hours_est',
+            'transfer_type',
             'outbound_flight_time_text',
             'inbound_flight_time_text',
             'local_beer_price',
@@ -214,7 +234,7 @@ class HolidayOptionNormaliser
         $hotelRaw = [];
         $packageRaw = [];
         foreach ($raw as $key => $value) {
-            if (in_array((string) $key, ['property', 'features', 'keySellingPoints', 'distance_to_airport_km'], true)) {
+            if (in_array((string) $key, ['property', 'features', 'keySellingPoints', 'distance_to_airport_km', 'introduction_text'], true)) {
                 $hotelRaw[$key] = $value;
                 continue;
             }

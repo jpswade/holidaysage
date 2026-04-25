@@ -68,6 +68,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         if (is_array($property['features'] ?? null)) {
             $features = array_map(fn ($f) => Str::lower((string) $f), $property['features']);
             foreach ($features as $feature) {
+                $this->applyAmenitySignals($hotel, $feature);
                 if (str_contains($feature, 'family')) {
                     $hotel['is_family_friendly'] = true;
                 }
@@ -149,6 +150,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         if (is_array($property['keySellingPoints'] ?? null)) {
             foreach ($property['keySellingPoints'] as $pointRaw) {
                 $point = Str::lower((string) $pointRaw);
+                $this->applyAmenitySignals($hotel, $point);
                 if (str_contains($point, 'family')) {
                     $hotel['is_family_friendly'] = true;
                 }
@@ -173,6 +175,16 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
                 }
                 if (preg_match('/(\d+)\s*rooms?\b/i', $point, $m) && ! isset($hotel['rooms_count'])) {
                     $hotel['rooms_count'] = (int) $m[1];
+                }
+                $shopsDistance = $this->extractDistanceMetersFromText($point, ['shop', 'shops']);
+                if ($shopsDistance !== null) {
+                    $hotel['near_shops'] = true;
+                    $hotel['distance_to_shops_meters'] = $shopsDistance;
+                }
+                $cafesDistance = $this->extractDistanceMetersFromText($point, ['cafe', 'cafes', 'bar', 'bars']);
+                if ($cafesDistance !== null) {
+                    $hotel['cafes_bars'] = true;
+                    $hotel['distance_to_cafes_bars_meters'] = $cafesDistance;
                 }
             }
         }
@@ -245,6 +257,15 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         }
 
         $text = Str::lower(preg_replace('/\s+/', ' ', strip_tags($html)) ?? '');
+        $this->applyAmenitySignals($hotel, $text);
+        $introSnippet = $this->extractIntroductionSnippet($html);
+        if ($introSnippet !== null) {
+            $hotel['introduction_snippet'] = $introSnippet;
+        }
+        $styleKeywords = $this->extractStyleKeywords($text);
+        if ($styleKeywords !== null) {
+            $hotel['style_keywords'] = $styleKeywords;
+        }
         if (preg_match('/(\d+)\s*m\s+from\s+(?:the\s+)?[^.]*beach/i', $text, $m) && is_numeric($m[1])) {
             $hotel['distance_to_beach_meters'] = (int) $m[1];
         }
@@ -253,12 +274,39 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         }
         if (str_contains($text, 'children\'s club') || str_contains($text, 'kids club')) {
             $hotel['has_kids_club'] = true;
+            if (preg_match('/(?:kids|children)[^0-9]{0,40}(\d{1,2})\s*(?:\+|to|-)\s*(\d{1,2})/i', $text, $kidsAge)) {
+                $hotel['kids_club_age_min'] = (int) min((int) $kidsAge[1], (int) $kidsAge[2]);
+            }
         }
         if (str_contains($text, 'waterpark') || str_contains($text, 'splash park')) {
             $hotel['has_waterpark'] = true;
         }
+        if (str_contains($text, 'play area')) {
+            $hotel['play_area'] = true;
+        }
         if (str_contains($text, 'family room')) {
             $hotel['has_family_rooms'] = true;
+        }
+        if (str_contains($text, 'gym') || str_contains($text, 'fitness')) {
+            $hotel['gym'] = true;
+        }
+        if (preg_match('/\bspa\b/i', $text)) {
+            $hotel['spa'] = true;
+        }
+        if (str_contains($text, 'evening entertainment') || str_contains($text, 'live entertainment')) {
+            $hotel['evening_entertainment'] = true;
+        }
+        if (str_contains($text, 'kids disco') || str_contains($text, "kids' disco") || str_contains($text, 'mini disco')) {
+            $hotel['kids_disco'] = true;
+        }
+        if (str_contains($text, 'adults only')) {
+            $hotel['adults_only_area'] = true;
+        }
+        if (str_contains($text, 'promenade')) {
+            $hotel['promenade'] = true;
+        }
+        if (str_contains($text, 'harbour') || str_contains($text, 'marina')) {
+            $hotel['harbour'] = true;
         }
         if (str_contains($text, 'no lift') || str_contains($text, 'no lifts')) {
             $hotel['has_lift'] = false;
@@ -271,6 +319,40 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         }
         if (str_contains($text, 'steps')) {
             $hotel['accessibility_issues'] = $this->appendIssue($hotel['accessibility_issues'] ?? null, 'steps_to_rooms');
+            if (preg_match('/(?:around|about|approx(?:imately)?\.?\s*)?(\d+)\s*steps?/i', $text, $steps)) {
+                $hotel['steps_count'] = (int) $steps[1];
+            }
+        }
+        if (($hotel['accessibility_issues'] ?? null) !== null || ($hotel['steps_count'] ?? null) !== null) {
+            $notes = [];
+            if (($hotel['has_lift'] ?? null) === false) {
+                $notes[] = 'No lift';
+            }
+            if (($hotel['steps_count'] ?? null) !== null) {
+                $notes[] = 'Steps present ('.$hotel['steps_count'].' steps)';
+            } elseif (str_contains((string) ($hotel['accessibility_issues'] ?? ''), 'steps')) {
+                $notes[] = 'Steps present';
+            }
+            if ($notes !== []) {
+                $hotel['accessibility_notes'] = implode('; ', $notes);
+            }
+        }
+        if (preg_match('/\bcots?\b/i', $text)) {
+            $hotel['cots_available'] = true;
+        }
+        $shopsDistance = $this->extractDistanceMetersFromText($text, ['shop', 'shops']);
+        if ($shopsDistance !== null) {
+            $hotel['near_shops'] = true;
+            $hotel['distance_to_shops_meters'] = $shopsDistance;
+        } elseif (str_contains($text, 'near shops') || str_contains($text, 'close to shops')) {
+            $hotel['near_shops'] = true;
+        }
+        $cafesDistance = $this->extractDistanceMetersFromText($text, ['cafe', 'cafes', 'bar', 'bars']);
+        if ($cafesDistance !== null) {
+            $hotel['cafes_bars'] = true;
+            $hotel['distance_to_cafes_bars_meters'] = $cafesDistance;
+        } elseif (str_contains($text, 'cafes and bars') || str_contains($text, 'bars and restaurants')) {
+            $hotel['cafes_bars'] = true;
         }
         if (preg_match('/(\d+)\s*rooms?\b/i', $text, $m) && ! isset($hotel['rooms_count'])) {
             $hotel['rooms_count'] = (int) $m[1];
@@ -329,6 +411,16 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
             }
             if ($recommendedBoard !== null) {
                 $package['board_recommended'] = $recommendedBoard;
+            }
+            if (! isset($package['transfer_type'])) {
+                $package['transfer_type'] = $this->extractTransferType($text) ?? 'coach';
+            }
+            if (! isset($package['flight_time_hours_est'])) {
+                $package['flight_time_hours_est'] = $this->estimateFlightHours(
+                    $package['outbound_flight_time_text'] ?? null,
+                    $package['inbound_flight_time_text'] ?? null,
+                    $text
+                );
             }
         }
         unset($package);
@@ -675,5 +767,151 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
         return $r * $c;
+    }
+
+    /**
+     * @param  list<string>  $keywords
+     */
+    private function extractDistanceMetersFromText(string $text, array $keywords): ?int
+    {
+        $keywordPattern = implode('|', array_map(static fn ($k) => preg_quote($k, '/'), $keywords));
+        if (preg_match('/(\d{1,4}(?:\.\d+)?)\s*(km|m)\s+from\s+[^.]{0,60}?(?:'.$keywordPattern.')/i', $text, $m)) {
+            $value = (float) $m[1];
+            $unit = strtolower((string) $m[2]);
+
+            return $unit === 'km' ? (int) round($value * 1000) : (int) round($value);
+        }
+
+        return null;
+    }
+
+    private function extractTransferType(string $text): ?string
+    {
+        if (str_contains($text, 'private transfer')) {
+            return 'private';
+        }
+        if (str_contains($text, 'shared transfer')) {
+            return 'shared';
+        }
+        if (str_contains($text, 'coach transfer') || str_contains($text, 'transfer time')) {
+            return 'coach';
+        }
+
+        return null;
+    }
+
+    private function estimateFlightHours(mixed $outboundWindow, mixed $inboundWindow, string $text): ?float
+    {
+        if (preg_match('/average flight time[^0-9]{0,10}(\d+(?:\.\d+)?)\s*hours?/i', $text, $m) && is_numeric($m[1])) {
+            return round((float) $m[1], 2);
+        }
+
+        $durations = [];
+        foreach ([$outboundWindow, $inboundWindow] as $window) {
+            if (! is_string($window) || ! preg_match('/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/', $window, $m)) {
+                continue;
+            }
+            $start = ((int) $m[1] * 60) + (int) $m[2];
+            $end = ((int) $m[3] * 60) + (int) $m[4];
+            if ($end < $start) {
+                $end += 24 * 60;
+            }
+            $durations[] = $end - $start;
+        }
+        if ($durations === []) {
+            return null;
+        }
+
+        return round((array_sum($durations) / count($durations)) / 60, 2);
+    }
+
+    private function extractIntroductionSnippet(string $html): ?string
+    {
+        if (preg_match('/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/i', $html, $m)) {
+            $text = trim(html_entity_decode((string) $m[1], ENT_QUOTES | ENT_HTML5));
+            if ($text !== '') {
+                return Str::limit($text, 500, '');
+            }
+        }
+        if (preg_match('/<p[^>]*class="[^"]*overview__introduction[^"]*"[^>]*>(.*?)<\/p>/is', $html, $m)) {
+            $text = trim(strip_tags(html_entity_decode((string) $m[1], ENT_QUOTES | ENT_HTML5)));
+            if ($text !== '') {
+                return Str::limit($text, 500, '');
+            }
+        }
+        if (preg_match('/<span[^>]*class="overview__list-text"[^>]*>(.*?)<\/span>/is', $html, $m)) {
+            $text = trim(strip_tags(html_entity_decode((string) $m[1], ENT_QUOTES | ENT_HTML5)));
+            if ($text !== '') {
+                return Str::limit($text, 500, '');
+            }
+        }
+
+        return null;
+    }
+
+    private function extractStyleKeywords(string $text): ?string
+    {
+        $map = [
+            'family' => ['family', 'kids', 'children'],
+            'luxury' => ['luxury', 'premium', 'upmarket', 'boutique'],
+            'beach' => ['beachfront', 'seafront', 'beach'],
+            'quiet' => ['peaceful', 'quiet', 'relaxing'],
+            'lively' => ['lively', 'nightlife', 'entertainment'],
+        ];
+        $out = [];
+        foreach ($map as $label => $terms) {
+            foreach ($terms as $term) {
+                if (str_contains($text, $term)) {
+                    $out[] = $label;
+                    break;
+                }
+            }
+        }
+        $out = array_values(array_unique($out));
+
+        return $out === [] ? null : implode('; ', $out);
+    }
+
+    /**
+     * @param  array<string,mixed>  $hotel
+     */
+    private function applyAmenitySignals(array &$hotel, string $text): void
+    {
+        if (str_contains($text, 'play area')) {
+            $hotel['play_area'] = true;
+        }
+        if (str_contains($text, 'gym') || str_contains($text, 'fitness')) {
+            $hotel['gym'] = true;
+        }
+        if (preg_match('/\bspa\b/i', $text)) {
+            $hotel['spa'] = true;
+        }
+        if (str_contains($text, 'evening entertainment') || str_contains($text, 'live entertainment')) {
+            $hotel['evening_entertainment'] = true;
+        }
+        if (str_contains($text, 'kids disco') || str_contains($text, "kids' disco") || str_contains($text, 'mini disco')) {
+            $hotel['kids_disco'] = true;
+        }
+        if (str_contains($text, 'adults only')) {
+            $hotel['adults_only_area'] = true;
+        }
+        if (str_contains($text, 'promenade')) {
+            $hotel['promenade'] = true;
+        }
+        if (str_contains($text, 'harbour') || str_contains($text, 'marina')) {
+            $hotel['harbour'] = true;
+        }
+        if (str_contains($text, 'near shops') || str_contains($text, 'close to shops')) {
+            $hotel['near_shops'] = true;
+        }
+        if (str_contains($text, 'cafes and bars') || str_contains($text, 'bars and restaurants')) {
+            $hotel['cafes_bars'] = true;
+        }
+        if (str_contains($text, 'cots') || str_contains($text, 'cot')) {
+            $hotel['cots_available'] = true;
+        }
+        if (preg_match('/(?:kids|children)[^0-9]{0,40}(\d{1,2})\s*(?:\+|to|-)\s*(\d{1,2})/i', $text, $kidsAge)) {
+            $hotel['kids_club_age_min'] = (int) min((int) $kidsAge[1], (int) $kidsAge[2]);
+        }
     }
 }

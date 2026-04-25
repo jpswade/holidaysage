@@ -28,6 +28,8 @@ class HolidayPackage extends Model
         'flight_outbound_duration_minutes',
         'flight_inbound_duration_minutes',
         'transfer_minutes',
+        'flight_time_hours_est',
+        'transfer_type',
         'outbound_flight_time_text',
         'inbound_flight_time_text',
         'local_beer_price',
@@ -46,6 +48,7 @@ class HolidayPackage extends Model
         return [
             'departure_date' => 'date',
             'return_date' => 'date',
+            'flight_time_hours_est' => 'decimal:2',
             'local_beer_price' => 'decimal:2',
             'three_course_meal_for_two_price' => 'decimal:2',
             'raw_attributes' => 'array',

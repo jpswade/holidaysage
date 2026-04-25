@@ -110,6 +110,57 @@ class Jet2DetailPageParserTest extends TestCase
         $this->assertSame(88.8, $parsed['hotel']['distance_to_airport_km']);
     }
 
+    public function test_it_extracts_phase_two_csv_enrichment_fields(): void
+    {
+        $parser = app(Jet2DetailPageParser::class);
+        $candidate = $this->candidate();
+        $html = <<<'HTML'
+<html>
+<head>
+  <meta property="og:description" content="Family beachfront hotel with luxury touches and a relaxing atmosphere.">
+</head>
+<body>
+  <span class="overview__list-text">Indoor play area</span>
+  <span class="overview__list-text">500m from shops</span>
+  <span class="overview__list-text">1.2km from cafes and bars</span>
+  <p>Average flight time 4.5 hours.</p>
+  <p>Coach transfer available, transfer time around 50 minutes.</p>
+  <p>Gym, spa, evening entertainment, kids disco, adults only area nearby.</p>
+  <p>Located on the promenade close to the harbour and marina.</p>
+  <p>Kids club ages 4-12.</p>
+  <p>No lift and around 12 steps to some rooms.</p>
+  <p>Cots are available on request.</p>
+</body>
+</html>
+HTML;
+
+        $parsed = $parser->parse($candidate, $html);
+        $hotel = $parsed['hotel'];
+        $package = $parsed['packages'][0] ?? [];
+
+        $this->assertTrue($hotel['play_area']);
+        $this->assertTrue($hotel['gym']);
+        $this->assertTrue($hotel['spa']);
+        $this->assertTrue($hotel['evening_entertainment']);
+        $this->assertTrue($hotel['kids_disco']);
+        $this->assertTrue($hotel['adults_only_area']);
+        $this->assertTrue($hotel['promenade']);
+        $this->assertTrue($hotel['harbour']);
+        $this->assertTrue($hotel['near_shops']);
+        $this->assertSame(500, $hotel['distance_to_shops_meters']);
+        $this->assertTrue($hotel['cafes_bars']);
+        $this->assertSame(1200, $hotel['distance_to_cafes_bars_meters']);
+        $this->assertSame(4, $hotel['kids_club_age_min']);
+        $this->assertSame(12, $hotel['steps_count']);
+        $this->assertSame('No lift; Steps present (12 steps)', $hotel['accessibility_notes']);
+        $this->assertTrue($hotel['cots_available']);
+        $this->assertStringContainsString('Family beachfront hotel', $hotel['introduction_snippet']);
+        $this->assertStringContainsString('family', $hotel['style_keywords']);
+
+        $this->assertSame('coach', $package['transfer_type']);
+        $this->assertSame(4.5, $package['flight_time_hours_est']);
+    }
+
     private function fixture(string $name): string
     {
         $path = base_path('tests/Fixtures/'.$name);
