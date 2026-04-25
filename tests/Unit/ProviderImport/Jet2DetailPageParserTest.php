@@ -41,8 +41,8 @@ class Jet2DetailPageParserTest extends TestCase
         $this->assertSame('All Inclusive', $packages[0]['board_recommended']);
         $this->assertSame(2.5, $packages[0]['local_beer_price']);
         $this->assertSame(42.1, $packages[0]['three_course_meal_for_two_price']);
-        $this->assertSame('08:05-12:10', $packages[0]['outbound_flight_time_text']);
-        $this->assertSame('13:20-15:35', $packages[0]['inbound_flight_time_text']);
+        $this->assertSame('07:25-11:25', $packages[0]['outbound_flight_time_text']);
+        $this->assertSame('12:20-14:25', $packages[0]['inbound_flight_time_text']);
     }
 
     public function test_it_extracts_expected_fields_from_real_prinsotel_fixture(): void
@@ -129,7 +129,7 @@ class Jet2DetailPageParserTest extends TestCase
   <p>Located on the promenade close to the harbour and marina.</p>
   <p>Kids club ages 4-12.</p>
   <p>No lift and around 12 steps to some rooms.</p>
-  <p>Cots are available on request.</p>
+  <div data-modeldata='{"roomFacilities":["Air conditioning","Cot available on request"]}'></div>
 </body>
 </html>
 HTML;
@@ -159,6 +159,71 @@ HTML;
 
         $this->assertSame('coach', $package['transfer_type']);
         $this->assertSame(4.5, $package['flight_time_hours_est']);
+    }
+
+    public function test_it_prefers_more_inclusive_board_recommendation(): void
+    {
+        $parser = app(Jet2DetailPageParser::class);
+        $candidate = $this->candidate();
+        $candidate['raw_attributes']['accommodation_options'] = [
+            [
+                'board' => 'Bed & Breakfast',
+                'boardId' => '2',
+                'priceOptions' => [['totalPrice' => 5000]],
+            ],
+            [
+                'board' => 'Half Board',
+                'boardId' => '3',
+                'priceOptions' => [['totalPrice' => 5200]],
+            ],
+        ];
+
+        $parsed = $parser->parse($candidate, '<html><body></body></html>');
+        $package = $parsed['packages'][0] ?? [];
+
+        $this->assertSame('Half Board', $package['board_recommended'] ?? null);
+    }
+
+    public function test_it_normalises_flight_time_estimate_similar_to_reference_outputs(): void
+    {
+        $parser = app(Jet2DetailPageParser::class);
+        $candidate = $this->candidate();
+        $candidate['raw_attributes']['outbound_flight'] = '08:00-11:45';
+        $candidate['raw_attributes']['inbound_flight'] = '12:15-14:05';
+
+        $parsed = $parser->parse($candidate, '<html><body></body></html>');
+        $package = $parsed['packages'][0] ?? [];
+        $this->assertSame(2.5, $package['flight_time_hours_est'] ?? null);
+
+        $candidate['raw_attributes']['outbound_flight'] = '07:45-13:15';
+        $candidate['raw_attributes']['inbound_flight'] = '13:35-15:20';
+        $parsedLong = $parser->parse($candidate, '<html><body></body></html>');
+        $packageLong = $parsedLong['packages'][0] ?? [];
+        $this->assertSame(4.0, $packageLong['flight_time_hours_est'] ?? null);
+
+        $candidate['raw_attributes']['outbound_flight'] = 'Sat 25 Jul 2026 08:00 – Sat 25 Jul 2026 11:45';
+        $candidate['raw_attributes']['inbound_flight'] = 'Tue 04 Aug 2026 12:15 – Tue 04 Aug 2026 14:05';
+        $parsedDated = $parser->parse($candidate, '<html><body></body></html>');
+        $packageDated = $parsedDated['packages'][0] ?? [];
+        $this->assertSame(2.5, $packageDated['flight_time_hours_est'] ?? null);
+    }
+
+    public function test_it_prefers_rich_raw_flight_window_over_time_only_detail_modal(): void
+    {
+        $parser = app(Jet2DetailPageParser::class);
+        $candidate = $this->candidate();
+        $candidate['raw_attributes']['outbound_flight'] = 'Sat 25 Jul 2026 08:05 – Sat 25 Jul 2026 12:10';
+        $candidate['raw_attributes']['inbound_flight'] = 'Tue 04 Aug 2026 13:20 – Tue 04 Aug 2026 15:35';
+
+        $html = <<<'HTML'
+<div data-flight-information-modal-model="{&quot;outboundFlight&quot;:{&quot;departureTime&quot;:&quot;08:05&quot;,&quot;arrivalTime&quot;:&quot;12:10&quot;},&quot;inboundFlight&quot;:{&quot;departureTime&quot;:&quot;13:20&quot;,&quot;arrivalTime&quot;:&quot;15:35&quot;}}"></div>
+HTML;
+
+        $parsed = $parser->parse($candidate, $html);
+        $package = $parsed['packages'][0] ?? [];
+
+        $this->assertSame('Sat 25 Jul 2026 08:05 – Sat 25 Jul 2026 12:10', $package['outbound_flight_time_text'] ?? null);
+        $this->assertSame('Tue 04 Aug 2026 13:20 – Tue 04 Aug 2026 15:35', $package['inbound_flight_time_text'] ?? null);
     }
 
     private function fixture(string $name): string

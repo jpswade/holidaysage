@@ -23,6 +23,8 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         'SC' => 'Self Catering',
         'RO' => 'Room Only',
     ];
+    /** @var list<string> */
+    private const BOARD_PRIORITY = ['AI', 'FB', 'HB', 'BB', 'SC', 'RO'];
 
     public function __construct(
         private readonly AirportLookupService $airportLookup,
@@ -106,6 +108,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         }
         foreach ($overviewItems as $itemRaw) {
             $item = Str::lower($itemRaw);
+            $this->applyAmenitySignals($hotel, $item);
             if (preg_match('/^(\d+)\s*rooms?$/i', $item, $m)) {
                 $hotel['rooms_count'] = (int) $m[1];
             }
@@ -141,6 +144,24 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
             }
             if (preg_match('/(\d+)\s*m\s+from\s+.*beach/i', $item, $m)) {
                 $hotel['distance_to_beach_meters'] = (int) $m[1];
+            }
+            if (preg_match('/(\d+)\s*(km|m)\s+from\s+.*shops?/i', $item, $m)) {
+                $hotel['near_shops'] = true;
+                $hotel['distance_to_shops_meters'] = strtolower((string) $m[2]) === 'km'
+                    ? (int) round(((float) $m[1]) * 1000)
+                    : (int) $m[1];
+            }
+            if (preg_match('/(\d+)\s*(km|m)\s+from\s+.*(?:bars?|cafes?|restaurants?)/i', $item, $m)) {
+                $hotel['cafes_bars'] = true;
+                $hotel['distance_to_cafes_bars_meters'] = strtolower((string) $m[2]) === 'km'
+                    ? (int) round(((float) $m[1]) * 1000)
+                    : (int) $m[1];
+            }
+            if (preg_match('/(\d{1,2})\s*-\s*(\d{1,2})\s*yrs?/i', $item, $m)) {
+                $minAge = (int) min((int) $m[1], (int) $m[2]);
+                if ($minAge >= 2 && $minAge <= 17) {
+                    $hotel['kids_club_age_min'] = $minAge;
+                }
             }
         }
         if (($hotel['has_lift'] ?? null) === false && (($hotel['floors_count'] ?? null) !== null) && (int) $hotel['floors_count'] >= 3) {
@@ -256,8 +277,33 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
             $hotel['star_rating'] = (int) round((float) $m[1]);
         }
 
+        $rawLower = Str::lower(html_entity_decode($html, ENT_QUOTES | ENT_HTML5));
         $text = Str::lower(preg_replace('/\s+/', ' ', strip_tags($html)) ?? '');
         $this->applyAmenitySignals($hotel, $text);
+        if (preg_match('/mini\\W*discos?|kids\\W*disco/i', $rawLower)) {
+            $hotel['kids_disco'] = true;
+        }
+        if (preg_match('/\\bpromenade\\b/i', $rawLower)) {
+            $hotel['promenade'] = true;
+        }
+        if (preg_match('/\\bharbour\\b|\\bmarina\\b/i', $rawLower)) {
+            $hotel['harbour'] = true;
+        }
+        if (preg_match('/\\bnear\\s+shops\\b|\\bfrom\\s+shops\\b/i', $rawLower)) {
+            $hotel['near_shops'] = true;
+        }
+        if (! isset($hotel['distance_to_shops_meters']) && preg_match('/(\d{1,4}(?:\\.\\d+)?)\\s*(km|m)\\s+from\\s+[^<]{0,80}shops?/i', $rawLower, $m)) {
+            $hotel['distance_to_shops_meters'] = strtolower((string) $m[2]) === 'km'
+                ? (int) round(((float) $m[1]) * 1000)
+                : (int) round((float) $m[1]);
+            $hotel['near_shops'] = true;
+        }
+        if (! isset($hotel['distance_to_cafes_bars_meters']) && preg_match('/(\d{1,4}(?:\\.\\d+)?)\\s*(km|m)\\s+from\\s+[^<]{0,80}(?:bars?|cafes?|restaurants?)/i', $rawLower, $m)) {
+            $hotel['distance_to_cafes_bars_meters'] = strtolower((string) $m[2]) === 'km'
+                ? (int) round(((float) $m[1]) * 1000)
+                : (int) round((float) $m[1]);
+            $hotel['cafes_bars'] = true;
+        }
         $introSnippet = $this->extractIntroductionSnippet($html);
         if ($introSnippet !== null) {
             $hotel['introduction_snippet'] = $introSnippet;
@@ -296,7 +342,8 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         if (str_contains($text, 'evening entertainment') || str_contains($text, 'live entertainment')) {
             $hotel['evening_entertainment'] = true;
         }
-        if (str_contains($text, 'kids disco') || str_contains($text, "kids' disco") || str_contains($text, 'mini disco')) {
+        if (preg_match('/kids\\W*disco/i', $text)
+            || preg_match('/mini\\W*discos?/i', $text)) {
             $hotel['kids_disco'] = true;
         }
         if (str_contains($text, 'adults only')) {
@@ -323,6 +370,9 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
                 $hotel['steps_count'] = (int) $steps[1];
             }
         }
+        if (! isset($hotel['steps_count']) && preg_match('/(?:around|about|approx(?:imately)?\.?\s*)?(\d+)\s*steps?/i', $rawLower, $steps)) {
+            $hotel['steps_count'] = (int) $steps[1];
+        }
         if (($hotel['accessibility_issues'] ?? null) !== null || ($hotel['steps_count'] ?? null) !== null) {
             $notes = [];
             if (($hotel['has_lift'] ?? null) === false) {
@@ -337,7 +387,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
                 $hotel['accessibility_notes'] = implode('; ', $notes);
             }
         }
-        if (preg_match('/\bcots?\b/i', $text)) {
+        if ($this->extractCotsAvailable($html)) {
             $hotel['cots_available'] = true;
         }
         $shopsDistance = $this->extractDistanceMetersFromText($text, ['shop', 'shops']);
@@ -389,8 +439,14 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         $localBeerPrice = $this->extractCurrencyValue((string) ($localInfo['local_beer'] ?? ''), 'local beer');
         $mealForTwoPrice = $this->extractCurrencyValue((string) ($localInfo['three_course_meal_for_two'] ?? ''), 'three-course meal for two');
         $flightInfo = $this->extractFlightInfo($html);
-        $outboundFlight = $this->extractFlightWindow(($candidate['raw_attributes']['outbound_flight'] ?? null) ?: ($flightInfo['outbound'] ?? null));
-        $inboundFlight = $this->extractFlightWindow(($candidate['raw_attributes']['inbound_flight'] ?? null) ?: ($flightInfo['inbound'] ?? null));
+        $outboundFlight = $this->selectCanonicalFlightWindow(
+            $this->extractFlightWindow($flightInfo['outbound'] ?? null),
+            $this->extractFlightWindow($candidate['raw_attributes']['outbound_flight'] ?? null)
+        );
+        $inboundFlight = $this->selectCanonicalFlightWindow(
+            $this->extractFlightWindow($flightInfo['inbound'] ?? null),
+            $this->extractFlightWindow($candidate['raw_attributes']['inbound_flight'] ?? null)
+        );
         $recommendedBoard = $this->extractRecommendedBoard($html, $accommodationOptions);
 
         if ($packages === []) {
@@ -573,16 +629,27 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
                 }
             }
         }
-        foreach (array_keys(self::BOARD_LABELS) as $code) {
-            if (in_array($code, $codes, true)) {
-                return self::BOARD_LABELS[$code];
-            }
-        }
-
         if (preg_match_all('/overview__board-type-title[^>]*>\s*([^<]+)\s*</i', $html, $m) && $m[1] !== []) {
+            $titleCodes = [];
+            foreach ($m[1] as $title) {
+                $code = $this->normaliseBoardCode((string) $title);
+                if ($code !== null) {
+                    $titleCodes[] = $code;
+                }
+            }
+            foreach (self::BOARD_PRIORITY as $code) {
+                if (in_array($code, $titleCodes, true)) {
+                    return self::BOARD_LABELS[$code];
+                }
+            }
             $last = trim((string) end($m[1]));
 
             return $last !== '' ? $last : null;
+        }
+        foreach (self::BOARD_PRIORITY as $code) {
+            if (in_array($code, $codes, true)) {
+                return self::BOARD_LABELS[$code];
+            }
         }
 
         return null;
@@ -663,6 +730,26 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         }
 
         return $raw;
+    }
+
+    private function selectCanonicalFlightWindow(?string $detailWindow, ?string $rawWindow): ?string
+    {
+        if ($detailWindow === null) {
+            return $rawWindow;
+        }
+        if ($rawWindow === null) {
+            return $detailWindow;
+        }
+
+        $detailIsTimeOnly = (bool) preg_match('/^\d{2}:\d{2}-\d{2}:\d{2}$/', $detailWindow);
+        $rawHasDateContext = mb_strlen($rawWindow) > 30;
+
+        // Prefer immutable API flight windows when detail modal only exposes times.
+        if ($detailIsTimeOnly && $rawHasDateContext) {
+            return $rawWindow;
+        }
+
+        return $detailWindow;
     }
 
     /**
@@ -808,7 +895,11 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
 
         $durations = [];
         foreach ([$outboundWindow, $inboundWindow] as $window) {
-            if (! is_string($window) || ! preg_match('/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/', $window, $m)) {
+            if (! is_string($window) || trim($window) === '') {
+                continue;
+            }
+            $m = [];
+            if (! preg_match('/(\d{2}):(\d{2})\s*[–-]\s*(?:[A-Za-z]{3}\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+)?(\d{2}):(\d{2})$/u', $window, $m)) {
                 continue;
             }
             $start = ((int) $m[1] * 60) + (int) $m[2];
@@ -822,7 +913,12 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
             return null;
         }
 
-        return round((array_sum($durations) / count($durations)) / 60, 2);
+        $hours = (array_sum($durations) / count($durations)) / 60;
+        if ($hours >= 3.5) {
+            return (float) round($hours, 0);
+        }
+
+        return round(floor($hours * 2) / 2, 2);
     }
 
     private function extractIntroductionSnippet(string $html): ?string
@@ -872,6 +968,35 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         return $out === [] ? null : implode('; ', $out);
     }
 
+    private function extractCotsAvailable(string $html): bool
+    {
+        if (! preg_match_all('/data-modeldata=(["\'])(.*?)\1/i', $html, $matches) || $matches[2] === []) {
+            return false;
+        }
+        foreach ($matches[2] as $encoded) {
+            $decoded = html_entity_decode((string) $encoded, ENT_QUOTES | ENT_HTML5);
+            $json = json_decode($decoded, true);
+            if (! is_array($json)) {
+                continue;
+            }
+            $roomFacilities = $json['roomFacilities'] ?? [];
+            if (is_array($roomFacilities)) {
+                foreach ($roomFacilities as $facility) {
+                    if (is_string($facility) && preg_match('/\\bcots?\\b/i', $facility)) {
+                        return true;
+                    }
+                }
+            }
+            foreach (['description', 'additionalText'] as $field) {
+                if (is_string($json[$field] ?? null) && preg_match('/\\bcots?\\b.{0,40}\\b(available|request|provided|hire|free)\\b/i', (string) $json[$field])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @param  array<string,mixed>  $hotel
      */
@@ -907,11 +1032,11 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         if (str_contains($text, 'cafes and bars') || str_contains($text, 'bars and restaurants')) {
             $hotel['cafes_bars'] = true;
         }
-        if (str_contains($text, 'cots') || str_contains($text, 'cot')) {
-            $hotel['cots_available'] = true;
-        }
-        if (preg_match('/(?:kids|children)[^0-9]{0,40}(\d{1,2})\s*(?:\+|to|-)\s*(\d{1,2})/i', $text, $kidsAge)) {
-            $hotel['kids_club_age_min'] = (int) min((int) $kidsAge[1], (int) $kidsAge[2]);
+        if (preg_match('/(?:kids|children)[^0-9]{0,40}(\d{1,2})\s*-\s*(\d{1,2})\s*yrs?/i', $text, $kidsAge)) {
+            $minAge = (int) min((int) $kidsAge[1], (int) $kidsAge[2]);
+            if ($minAge >= 2 && $minAge <= 17) {
+                $hotel['kids_club_age_min'] = $minAge;
+            }
         }
     }
 }

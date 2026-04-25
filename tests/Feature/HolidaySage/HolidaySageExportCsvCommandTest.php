@@ -112,7 +112,7 @@ class HolidaySageExportCsvCommandTest extends TestCase
         $row = array_combine($headers, $values);
         $this->assertNotFalse($row);
         $this->assertSame('54', (string) ($row['private_transfer_time_by_distance_est_mins'] ?? ''));
-        $this->assertSame('4.50', (string) ($row['flight_time_hours_est'] ?? ''));
+        $this->assertSame('4.5', (string) ($row['flight_time_hours_est'] ?? ''));
         $this->assertSame('coach', (string) ($row['transfer_type'] ?? ''));
         $this->assertSame('TRUE', (string) ($row['gym'] ?? ''));
         $this->assertSame('TRUE', (string) ($row['near_shops'] ?? ''));
@@ -237,5 +237,115 @@ class HolidaySageExportCsvCommandTest extends TestCase
         $this->assertStringContainsString('Scoped Hotel', (string) $csv[1]);
         $this->assertStringContainsString(',3000,', (string) $csv[1]);
         $this->assertStringNotContainsString(',3100,', (string) $csv[1]);
+    }
+
+    public function test_run_scoped_export_selects_single_best_package_per_hotel(): void
+    {
+        $provider = ProviderSource::query()->create([
+            'key' => 'jet2',
+            'name' => 'Jet2 Holidays',
+            'base_url' => 'https://www.jet2holidays.com',
+            'status' => ProviderSourceStatus::Active,
+        ]);
+        $hotel = Hotel::query()->create([
+            'provider_source_id' => $provider->id,
+            'provider_hotel_id' => 'test-hotel-3',
+            'hotel_identity_hash' => hash('sha256', 'test-hotel-3'),
+            'hotel_name' => 'Single Best Hotel',
+            'hotel_slug' => 'single-best-hotel',
+            'destination_name' => 'Majorca',
+            'destination_country' => 'Spain',
+        ]);
+        $packageA = HolidayPackage::query()->create([
+            'provider_source_id' => $provider->id,
+            'hotel_id' => $hotel->id,
+            'provider_option_id' => 'opt-a',
+            'provider_url' => '/beach/balearics/majorca/single-best-hotel',
+            'airport_code' => 'PMI',
+            'departure_date' => '2026-07-25',
+            'return_date' => '2026-08-04',
+            'nights' => 10,
+            'adults' => 2,
+            'children' => 1,
+            'infants' => 0,
+            'board_type' => 'AI',
+            'price_total' => 5000,
+            'currency' => 'GBP',
+            'signature_hash' => hash('sha256', 'opt-a'),
+        ]);
+        $packageB = HolidayPackage::query()->create([
+            'provider_source_id' => $provider->id,
+            'hotel_id' => $hotel->id,
+            'provider_option_id' => 'opt-b',
+            'provider_url' => '/beach/balearics/majorca/single-best-hotel',
+            'airport_code' => 'PMI',
+            'departure_date' => '2026-07-25',
+            'return_date' => '2026-08-04',
+            'nights' => 10,
+            'adults' => 2,
+            'children' => 1,
+            'infants' => 0,
+            'board_type' => 'HB',
+            'price_total' => 4800,
+            'currency' => 'GBP',
+            'signature_hash' => hash('sha256', 'opt-b'),
+        ]);
+        $search = SavedHolidaySearch::query()->create([
+            'name' => 'Single Best Search',
+            'slug' => 'single-best-search',
+            'provider_import_url' => 'https://www.jet2holidays.com/search/results',
+            'departure_airport_code' => 'MAN',
+            'duration_min_nights' => 7,
+            'duration_max_nights' => 14,
+            'adults' => 2,
+            'children' => 1,
+            'infants' => 0,
+            'status' => 'active',
+        ]);
+        $run = SavedHolidaySearchRun::query()->create([
+            'saved_holiday_search_id' => $search->id,
+            'run_type' => 'import',
+            'status' => 'completed',
+            'imported_holiday_package_ids' => [$packageA->id, $packageB->id],
+        ]);
+        ScoredHolidayOption::query()->create([
+            'saved_holiday_search_id' => $search->id,
+            'saved_holiday_search_run_id' => $run->id,
+            'holiday_package_id' => $packageA->id,
+            'overall_score' => 8.5,
+            'travel_score' => 8.0,
+            'value_score' => 8.0,
+            'family_fit_score' => 8.0,
+            'location_score' => 8.0,
+            'board_score' => 8.0,
+            'price_score' => 8.0,
+            'is_disqualified' => false,
+            'disqualification_reasons' => [],
+        ]);
+        ScoredHolidayOption::query()->create([
+            'saved_holiday_search_id' => $search->id,
+            'saved_holiday_search_run_id' => $run->id,
+            'holiday_package_id' => $packageB->id,
+            'overall_score' => 7.0,
+            'travel_score' => 7.0,
+            'value_score' => 7.0,
+            'family_fit_score' => 7.0,
+            'location_score' => 7.0,
+            'board_score' => 7.0,
+            'price_score' => 7.0,
+            'is_disqualified' => false,
+            'disqualification_reasons' => [],
+        ]);
+
+        $path = storage_path('app/exports/test-output-best-per-hotel.csv');
+        $this->artisan('holidaysage:export-csv', ['--path' => $path, '--run-id' => (string) $run->id])
+            ->assertExitCode(0);
+
+        $this->assertFileExists($path);
+        $csv = file($path, FILE_IGNORE_NEW_LINES);
+        $this->assertNotFalse($csv);
+        $this->assertCount(2, $csv); // header + one chosen row for hotel
+        $this->assertStringContainsString(',5000,', (string) $csv[1]); // packageA (higher score)
+        $this->assertStringNotContainsString(',4800,', (string) $csv[1]);
     }
 }

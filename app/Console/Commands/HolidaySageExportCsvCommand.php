@@ -115,6 +115,15 @@ class HolidaySageExportCsvCommand extends Command
             ->when($runPackageIds !== null && $runPackageIds !== [], fn (Builder $q) => $q->whereIn('holiday_packages.id', $runPackageIds))
             ->orderBy('holiday_packages.id')
             ->get();
+        if ($runId !== null) {
+            $packages = $packages
+                ->sortBy([
+                    fn ($a, $b) => ((float) ($b->getAttribute('overall_score') ?? -INF)) <=> ((float) ($a->getAttribute('overall_score') ?? -INF)),
+                    fn ($a, $b) => ((float) ($a->price_total ?? INF)) <=> ((float) ($b->price_total ?? INF)),
+                ])
+                ->unique('hotel_id')
+                ->values();
+        }
 
         $rows = [];
         foreach ($packages as $package) {
@@ -141,7 +150,7 @@ class HolidaySageExportCsvCommand extends Command
                 'airport' => $package->airport_code,
                 'distance_to_airport_km' => $hotel->distance_to_airport_km,
                 'private_transfer_time_by_distance_est_mins' => $this->privateTransferMinutesByDistance($hotel->distance_to_airport_km),
-                'flight_time_hours_est' => $package->flight_time_hours_est,
+                'flight_time_hours_est' => $this->formatHoursEstimate($package->flight_time_hours_est),
                 'transfer_time_mins_est' => $package->transfer_minutes,
                 'transfer_type' => $package->transfer_type ?? '',
                 'board_recommended' => $this->boardLabel($package->board_recommended ?: $package->board_type),
@@ -268,5 +277,19 @@ class HolidaySageExportCsvCommand extends Command
         $minutes = (int) round(((float) $distanceKm / 50) * 60);
 
         return (string) $minutes;
+    }
+
+    private function formatHoursEstimate(mixed $value): string
+    {
+        if (! is_numeric($value)) {
+            return '';
+        }
+        $num = (float) $value;
+        if (abs($num - round($num)) < 0.00001) {
+            return number_format($num, 1, '.', '');
+        }
+        $formatted = number_format($num, 2, '.', '');
+
+        return rtrim(rtrim($formatted, '0'), '.');
     }
 }

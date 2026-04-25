@@ -135,7 +135,6 @@ class Jet2LiveImporter implements ProviderHttpImporter
         }
         $filters[] = 'inboundflighttimes_2-3';
         $filters[] = 'outboundflighttimes_2-3';
-
         $params = http_build_query([
             'departureAirportIds' => $airport,
             'destinationAreaIds' => $destination,
@@ -200,7 +199,12 @@ class Jet2LiveImporter implements ProviderHttpImporter
                 continue;
             }
 
-            $selectedFlightId = is_numeric($item['selectedFlightId'] ?? null) ? (int) $item['selectedFlightId'] : null;
+            $selectedFlightId = is_numeric($item['selectedFlightId'] ?? null)
+                ? (int) $item['selectedFlightId']
+                : null;
+            if ($selectedFlightId === null && is_numeric($item['selectedPrice']['flightId'] ?? null)) {
+                $selectedFlightId = (int) $item['selectedPrice']['flightId'];
+            }
             $price = null;
             $pricePerPerson = null;
             if (isset($item['selectedPrice']) && is_array($item['selectedPrice'])) {
@@ -243,6 +247,10 @@ class Jet2LiveImporter implements ProviderHttpImporter
             $ret = Carbon::parse($dep)->addDays($nights)->toDateString();
             $slug = Str::slug($name) ?: Str::random(12);
             $flightInfo = $selectedFlightId !== null ? ($flightById[$selectedFlightId] ?? null) : null;
+            if (! is_array($flightInfo)) {
+                $fallbackFlightId = $this->firstFlightIdFromAccommodationOptions($item);
+                $flightInfo = $fallbackFlightId !== null ? ($flightById[$fallbackFlightId] ?? null) : null;
+            }
             $airportTo = is_array($flightInfo) ? ($flightInfo['arrival_airport_code'] ?? null) : null;
             $outboundFlight = is_array($flightInfo) ? ($flightInfo['outbound_flight'] ?? null) : null;
             $inboundFlight = is_array($flightInfo) ? ($flightInfo['inbound_flight'] ?? null) : null;
@@ -337,13 +345,37 @@ class Jet2LiveImporter implements ProviderHttpImporter
             if ($departureIso === '' || $arrivalIso === '') {
                 return null;
             }
-            $departure = Carbon::parse($departureIso)->format('H:i');
-            $arrival = Carbon::parse($arrivalIso)->format('H:i');
+            $departure = Carbon::parse($departureIso)->format('D d M Y H:i');
+            $arrival = Carbon::parse($arrivalIso)->format('D d M Y H:i');
 
-            return $departure.'-'.$arrival;
+            return $departure.' – '.$arrival;
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * @param  array<string,mixed>  $item
+     */
+    private function firstFlightIdFromAccommodationOptions(array $item): ?int
+    {
+        if (! isset($item['accommodationOptions']) || ! is_array($item['accommodationOptions'])) {
+            return null;
+        }
+        foreach ($item['accommodationOptions'] as $option) {
+            if (! is_array($option) || ! isset($option['priceOptions']) || ! is_array($option['priceOptions'])) {
+                continue;
+            }
+            foreach ($option['priceOptions'] as $priceOption) {
+                if (! is_array($priceOption) || ! is_numeric($priceOption['flightId'] ?? null)) {
+                    continue;
+                }
+
+                return (int) $priceOption['flightId'];
+            }
+        }
+
+        return null;
     }
 
     /**
