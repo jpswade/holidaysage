@@ -3,7 +3,7 @@
 <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
     <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
         <span class="inline-flex items-center gap-1.5 font-medium text-slate-900">
-            <x-lucide-icon name="plane" class="h-4 w-4 text-teal-600" />
+            <x-lucide-plane class="h-4 w-4 text-teal-600" />
             {{ $summary->airport }}
         </span>
         <span>{{ $summary->dateRange }}</span>

@@ -11,7 +11,7 @@
                 <form method="POST" action="{{ route('searches.refresh', $search) }}">
                     @csrf
                     <button type="submit" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                        <x-lucide-icon name="refresh-cw" class="h-4 w-4" />
+                        <x-lucide-refresh-cw class="h-4 w-4" />
                         Refresh
                     </button>
                 </form>
@@ -27,12 +27,12 @@
 
         <div class="mt-6 flex flex-wrap items-center gap-2 text-sm text-slate-600">
             <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1">
-                <x-lucide-icon name="clock-3" class="h-4 w-4 text-slate-500" />
+                <x-lucide-clock-3 class="h-4 w-4 text-slate-500" />
                 Updated {{ optional($latestRun?->finished_at ?? $search->last_scored_at ?? $search->updated_at)->diffForHumans() }}
             </span>
             @if ($results instanceof \Illuminate\Support\Collection && $results->where('rank', '<=', 3)->count() > 0)
                 <span class="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-teal-700">
-                    <x-lucide-icon name="trending-up" class="h-4 w-4" />
+                    <x-lucide-trending-up class="h-4 w-4" />
                     {{ $results->where('rank', '<=', 3)->count() }} strong matches found
                 </span>
             @endif

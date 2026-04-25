@@ -27,7 +27,7 @@
                         <div class="mt-4 flex flex-wrap items-center gap-2 text-xs">
                             <span class="rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-700">{{ $search->scored_options_count }} options found</span>
                             <span class="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-1 font-medium text-teal-700">
-                                <x-lucide-icon name="trending-up" class="h-3.5 w-3.5" />
+                                <x-lucide-trending-up class="h-3.5 w-3.5" />
                                 Improving
                             </span>
                             <span class="rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-600">Updated {{ optional($search->last_scored_at ?? $search->updated_at)->diffForHumans() }}</span>

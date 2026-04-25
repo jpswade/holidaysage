@@ -53,7 +53,7 @@
         <ul class="mt-4 space-y-1 text-sm text-slate-700">
             @foreach (array_slice($card->reasons, 0, 3) as $reason)
                 <li class="flex items-start gap-2">
-                    <x-lucide-icon name="trending-up" class="mt-0.5 h-4 w-4 shrink-0 text-teal-600" />
+                    <x-lucide-trending-up class="mt-0.5 h-4 w-4 shrink-0 text-teal-600" />
                     <span>{{ $reason }}</span>
                 </li>
             @endforeach
@@ -64,7 +64,7 @@
         <ul class="mt-3 space-y-1 text-sm text-amber-800">
             @foreach (array_slice($card->warnings, 0, 2) as $warning)
                 <li class="flex items-start gap-2 rounded-lg bg-amber-50 px-2 py-1.5">
-                    <x-lucide-icon name="triangle-alert" class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    <x-lucide-triangle-alert class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <span>{{ $warning }}</span>
                 </li>
             @endforeach
