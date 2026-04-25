@@ -94,11 +94,10 @@ class HolidaySageRunCommandTest extends TestCase
         $this->seed(ProviderSourceSeeder::class);
         Config::set('holidaysage.import_use_stub', false);
 
-        // Jet2LiveImporter uses Http::retry([300, 1000, 2000], ...): four attempts; all must be non-2xx to fail.
+        // Jet2LiveImporter uses Http::retry(3, 1000, ...): three attempts; all must be non-2xx to fail.
         Http::fake([
             'www.jet2holidays.com/api/jet2/smartsearch/search*' => Http::sequence()
                 ->push('busy', 503)
-                ->push('still busy', 503)
                 ->push('still busy', 503)
                 ->push('still busy', 503),
         ]);

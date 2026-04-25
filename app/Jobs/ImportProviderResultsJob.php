@@ -24,6 +24,9 @@ class ImportProviderResultsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /** Horizon worker timeout must be >= this; Jet2 live smart search can be slow (see Jet2LiveImporter HTTP timeouts). */
+    public int $timeout = 180;
+
     public function __construct(
         public int $runId,
         public int $searchId,

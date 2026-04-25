@@ -25,7 +25,7 @@ class Jet2LiveImporter implements ProviderHttpImporter
     {
         $apiUrl = $this->buildSmartSearchApiUrl($url);
         if ($apiUrl !== null) {
-            [$status, $body] = $this->fetchViaNativeHttp($apiUrl, true);
+            [$status, $body] = $this->fetchViaNativeHttp($apiUrl, true, $url);
             if ($status < 200 || $status >= 300) {
                 throw new \RuntimeException('Jet2 API HTTP '.$status.' for '.$apiUrl);
             }
@@ -65,37 +65,57 @@ class Jet2LiveImporter implements ProviderHttpImporter
     /**
      * @return array{0:int,1:string}
      */
-    private function fetchViaNativeHttp(string $url, bool $isApi): array
+    private function fetchViaNativeHttp(string $url, bool $isApi, ?string $searchResultsUrlForReferer = null): array
     {
-        $response = $this->requestWithBrowserHeaders($url, $isApi);
+        $response = $this->requestWithBrowserHeaders($url, $isApi, $searchResultsUrlForReferer);
 
         return [$response->status(), (string) $response->body()];
     }
 
-    private function requestWithBrowserHeaders(string $url, bool $isApi): Response
+    private function requestWithBrowserHeaders(string $url, bool $isApi, ?string $searchResultsUrlForReferer = null): Response
     {
-        $headers = [
-            'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+        $ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+        $ch = [
+            'User-Agent' => $ua,
             'Accept-Language' => 'en-GB,en-US;q=0.9,en;q=0.8,pt;q=0.7',
-            'Cache-Control' => 'max-age=0',
             'DNT' => '1',
             'Sec-Ch-Ua' => '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
             'Sec-Ch-Ua-Mobile' => '?0',
             'Sec-Ch-Ua-Platform' => '"macOS"',
-            'Sec-Fetch-Mode' => 'navigate',
-            'Sec-Fetch-Dest' => 'document',
-            'Sec-Fetch-Site' => 'none',
-            'Sec-Fetch-User' => '?1',
-            'Upgrade-Insecure-Requests' => '1',
         ];
-        $headers['Accept'] = $isApi
-            ? 'application/json, text/javascript, */*; q=0.01'
-            : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7';
 
-        return Http::retry([300, 1000, 2000], throw: false)
+        if ($isApi && $searchResultsUrlForReferer !== null) {
+            // XHR to smartsearch: match what the results page sends (not top-level document navigation).
+            $headers = array_merge($ch, [
+                'Accept' => 'application/json, text/javascript, */*; q=0.01',
+                'Cache-Control' => 'no-cache',
+                'Pragma' => 'no-cache',
+                'Origin' => 'https://www.jet2holidays.com',
+                'Referer' => $searchResultsUrlForReferer,
+                'Sec-Fetch-Dest' => 'empty',
+                'Sec-Fetch-Mode' => 'cors',
+                'Sec-Fetch-Site' => 'same-origin',
+                'X-Requested-With' => 'XMLHttpRequest',
+            ]);
+        } else {
+            $headers = array_merge($ch, [
+                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Cache-Control' => 'max-age=0',
+                'Sec-Fetch-Dest' => 'document',
+                'Sec-Fetch-Mode' => 'navigate',
+                'Sec-Fetch-Site' => 'none',
+                'Sec-Fetch-User' => '?1',
+                'Upgrade-Insecure-Requests' => '1',
+            ]);
+        }
+
+        // force HTTP/1.1: HTTP/2 to this endpoint has produced stream errors and stalls with some stacks (cf. curl 92)
+        // retry(3, 1000, …): 3 attempts; the array form [1000, 2000] is *not* backoff, only 3 tries with 0ms delay in Laravel
+        return Http::retry(3, 1000, throw: false)
+            ->withOptions(['version' => 1.1])
             ->withHeaders($headers)
-            ->connectTimeout(10)
-            ->timeout(20)
+            ->connectTimeout(15)
+            ->timeout($isApi ? 50 : 40)
             ->get($url);
     }
 
@@ -122,8 +142,9 @@ class Jet2LiveImporter implements ProviderHttpImporter
         $sortorder = (string) ($q['sortorder'] ?? '1');
         $boardbasis = str_replace('_', '-', (string) ($q['boardbasis'] ?? '5_2_3'));
         $facility = str_replace('_', '-', (string) ($q['facility'] ?? ''));
+        $starratingSlug = str_replace('_', '-', (string) ($q['starrating'] ?? '4'));
 
-        $filters = ['boardbasis_'.$boardbasis, 'starrating_4'];
+        $filters = ['boardbasis_'.$boardbasis, 'starrating_'.$starratingSlug];
         if ($facility !== '') {
             $filters[] = 'facility_'.$facility;
         }
