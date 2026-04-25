@@ -108,30 +108,9 @@ class SearchController extends Controller
         ]);
     }
 
-    public function results(SavedHolidaySearch $search): View
+    public function results(SavedHolidaySearch $search): RedirectResponse
     {
-        $latestRun = SavedHolidaySearchRun::query()
-            ->where('saved_holiday_search_id', $search->id)
-            ->latest('id')
-            ->first();
-
-        $rows = collect();
-        if ($latestRun) {
-            $rows = $latestRun->scoredOptions()
-                ->with(['holidayPackage.hotel', 'holidayPackage.providerSource'])
-                ->orderByRaw('rank_position IS NULL')
-                ->orderBy('rank_position')
-                ->orderByDesc('overall_score')
-                ->paginate(12)
-                ->through(fn ($row) => ResultCardViewModel::fromModel($row));
-        }
-
-        return view('searches.results', [
-            'search' => $search,
-            'summary' => SearchSummaryViewModel::fromModel($search),
-            'latestRun' => $latestRun,
-            'results' => $rows,
-        ]);
+        return redirect()->route('searches.show', $search);
     }
 
     public function import(ImportSearchUrlRequest $request, ImportUrlParserRegistry $parsers): JsonResponse

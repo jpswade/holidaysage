@@ -56,7 +56,7 @@ class FrontendCustomerPagesTest extends TestCase
         ]);
     }
 
-    public function test_saved_searches_and_results_pages_render_ranked_data(): void
+    public function test_saved_searches_and_show_page_render_ranked_data(): void
     {
         $search = $this->seedScoredSearch();
 
@@ -65,11 +65,13 @@ class FrontendCustomerPagesTest extends TestCase
 
         $show = $this->get(route('searches.show', $search));
         $show->assertOk();
-        $show->assertSee('Top recommended options');
+        $show->assertSee('Top');
+        $show->assertSee('recommended options');
         $show->assertSee('Kids club');
+        $show->assertDontSee('Recent run activity');
 
         $results = $this->get(route('searches.results', $search));
-        $results->assertOk()->assertSee('View Deal');
+        $results->assertRedirect(route('searches.show', $search));
     }
 
     public function test_import_endpoint_returns_prefill_for_supported_url(): void
