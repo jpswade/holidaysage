@@ -1,4 +1,4 @@
-<x-layouts.holidaysage :title="$search->name . ' - HolidaySage'">
+<x-layouts.app-shell :title="$search->name . ' - HolidaySage'">
     <section>
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -79,4 +79,4 @@
             </div>
         </section>
     @endif
-</x-layouts.holidaysage>
+</x-layouts.app-shell>

@@ -1,4 +1,4 @@
-<x-layouts.holidaysage title="Create Search - HolidaySage">
+<x-layouts.app-shell title="Create Search - HolidaySage">
     <section class="mx-auto max-w-4xl">
         <h1 class="text-3xl font-bold tracking-tight text-slate-900">Tell us about your perfect holiday</h1>
         <p class="mt-3 text-slate-600">Define your preferences once, and we will continuously find and rank the best options from Jet2 and TUI.</p>
@@ -142,4 +142,4 @@
             });
         })();
     </script>
-</x-layouts.holidaysage>
+</x-layouts.app-shell>

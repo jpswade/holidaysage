@@ -1,4 +1,4 @@
-<x-layouts.holidaysage title="My Saved Searches - HolidaySage">
+<x-layouts.app-shell title="My Saved Searches - HolidaySage">
     <section>
         <div class="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -40,4 +40,4 @@
             </div>
         @endif
     </section>
-</x-layouts.holidaysage>
+</x-layouts.app-shell>

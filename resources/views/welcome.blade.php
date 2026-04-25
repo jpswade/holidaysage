@@ -1,4 +1,4 @@
-<x-layouts.holidaysage title="HolidaySage - Find your perfect holiday">
+<x-layouts.app-shell title="HolidaySage - Find your perfect holiday">
     <section class="grid gap-10 lg:grid-cols-2 lg:items-center">
         <div>
             <p class="mb-3 text-sm font-semibold uppercase tracking-wide text-teal-700">Smarter holiday search</p>
@@ -53,4 +53,4 @@
             </article>
         </div>
     </section>
-</x-layouts.holidaysage>
+</x-layouts.app-shell>

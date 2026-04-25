@@ -1,4 +1,4 @@
-<x-layouts.holidaysage :title="$search->name . ' Results - HolidaySage'">
+<x-layouts.app-shell :title="$search->name . ' Results - HolidaySage'">
     <section>
         <a href="{{ route('searches.show', $search) }}" class="inline-flex items-center text-sm font-medium text-teal-700 hover:text-teal-800">← Back to saved search</a>
         <div class="mt-3 flex flex-wrap items-end justify-between gap-3">
@@ -33,4 +33,4 @@
             </div>
         @endif
     </section>
-</x-layouts.holidaysage>
+</x-layouts.app-shell>
