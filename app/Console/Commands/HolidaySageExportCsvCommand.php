@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\HolidayPackage;
+use App\Models\SavedHolidaySearchRun;
 use App\Models\ScoredHolidayOption;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
@@ -13,6 +14,11 @@ class HolidaySageExportCsvCommand extends Command
 {
     /** @var array<string,string> */
     private const BOARD_LABELS = [
+        '1' => 'Room Only',
+        '2' => 'Bed & Breakfast',
+        '3' => 'Half Board',
+        '4' => 'Full Board',
+        '5' => 'All Inclusive',
         'AI' => 'All Inclusive',
         'FB' => 'Full Board',
         'HB' => 'Half Board',
@@ -78,6 +84,13 @@ class HolidaySageExportCsvCommand extends Command
      */
     private function buildRows(string $providerKey, ?int $runId): array
     {
+        $runPackageIds = null;
+        if ($runId !== null) {
+            $run = SavedHolidaySearchRun::query()->find($runId);
+            $rawIds = is_array($run?->imported_holiday_package_ids) ? $run->imported_holiday_package_ids : [];
+            $runPackageIds = array_values(array_unique(array_map('intval', array_filter($rawIds, fn ($id) => is_numeric($id)))));
+        }
+
         $latestScored = ScoredHolidayOption::query()
             ->selectRaw('MAX(id) as id, holiday_package_id')
             ->when($runId !== null, fn (Builder $q) => $q->where('saved_holiday_search_run_id', $runId))
@@ -98,6 +111,8 @@ class HolidaySageExportCsvCommand extends Command
                 's.disqualification_reasons',
             ])
             ->whereHas('providerSource', fn (Builder $q) => $q->where('key', $providerKey))
+            ->when($runId !== null, fn (Builder $q) => $q->whereNotNull('latest_scores.id'))
+            ->when($runPackageIds !== null && $runPackageIds !== [], fn (Builder $q) => $q->whereIn('holiday_packages.id', $runPackageIds))
             ->orderBy('holiday_packages.id')
             ->get();
 
@@ -233,6 +248,7 @@ class HolidaySageExportCsvCommand extends Command
             return self::BOARD_LABELS[$v];
         }
         return match (true) {
+            is_numeric($v) && isset(self::BOARD_LABELS[$v]) => self::BOARD_LABELS[$v],
             str_contains($v, 'ALL') => self::BOARD_LABELS['AI'],
             str_contains($v, 'FULL') => self::BOARD_LABELS['FB'],
             str_contains($v, 'HALF') => self::BOARD_LABELS['HB'],

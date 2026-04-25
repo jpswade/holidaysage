@@ -10,6 +10,11 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
 {
     use ExtractsEmbeddedJson;
     private const BOARD_LABELS = [
+        '1' => 'Room Only',
+        '2' => 'Bed & Breakfast',
+        '3' => 'Half Board',
+        '4' => 'Full Board',
+        '5' => 'All Inclusive',
         'AI' => 'All Inclusive',
         'FB' => 'Full Board',
         'HB' => 'Half Board',
@@ -313,8 +318,8 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         $localBeerPrice = $this->extractCurrencyValue((string) ($localInfo['local_beer'] ?? ''), 'local beer');
         $mealForTwoPrice = $this->extractCurrencyValue((string) ($localInfo['three_course_meal_for_two'] ?? ''), 'three-course meal for two');
         $flightInfo = $this->extractFlightInfo($html);
-        $outboundFlight = $this->extractFlightWindow($flightInfo['outbound'] ?? ($candidate['raw_attributes']['outbound_flight'] ?? null));
-        $inboundFlight = $this->extractFlightWindow($flightInfo['inbound'] ?? ($candidate['raw_attributes']['inbound_flight'] ?? null));
+        $outboundFlight = $this->extractFlightWindow(($candidate['raw_attributes']['outbound_flight'] ?? null) ?: ($flightInfo['outbound'] ?? null));
+        $inboundFlight = $this->extractFlightWindow(($candidate['raw_attributes']['inbound_flight'] ?? null) ?: ($flightInfo['inbound'] ?? null));
         $recommendedBoard = $this->extractRecommendedBoard($html, $accommodationOptions);
 
         if ($packages === []) {
@@ -333,7 +338,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
             if ($inboundFlight !== null) {
                 $package['inbound_flight_time_text'] = $inboundFlight;
             }
-            if (! isset($package['board_recommended']) && $recommendedBoard !== null) {
+            if ($recommendedBoard !== null) {
                 $package['board_recommended'] = $recommendedBoard;
             }
         }
@@ -555,6 +560,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
             return null;
         }
         return match (true) {
+            isset(self::BOARD_LABELS[$v]) => $v,
             str_contains($v, 'ALL') || $v === 'AI' || $v === 'AL' => 'AI',
             str_contains($v, 'FULL') || $v === 'FB' => 'FB',
             str_contains($v, 'HALF') || $v === 'HB' => 'HB',

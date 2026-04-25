@@ -30,8 +30,8 @@ class Jet2DetailPageParserTest extends TestCase
         $this->assertSame('All Inclusive', $packages[0]['board_recommended']);
         $this->assertSame(2.5, $packages[0]['local_beer_price']);
         $this->assertSame(42.1, $packages[0]['three_course_meal_for_two_price']);
-        $this->assertSame('07:25-11:25', $packages[0]['outbound_flight_time_text']);
-        $this->assertSame('12:20-14:25', $packages[0]['inbound_flight_time_text']);
+        $this->assertSame('08:05-12:10', $packages[0]['outbound_flight_time_text']);
+        $this->assertSame('13:20-15:35', $packages[0]['inbound_flight_time_text']);
     }
 
     public function test_it_extracts_expected_fields_from_real_prinsotel_fixture(): void
