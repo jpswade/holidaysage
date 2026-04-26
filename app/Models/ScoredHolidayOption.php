@@ -14,6 +14,7 @@ class ScoredHolidayOption extends Model
         'overall_score',
         'travel_score',
         'value_score',
+        'reviews_score',
         'family_fit_score',
         'location_score',
         'board_score',

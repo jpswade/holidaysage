@@ -119,4 +119,57 @@ class ResultCardViewModelTest extends TestCase
 
         $this->assertNull(ResultCardViewModel::fromModel($scored)->imageUrl);
     }
+
+    public function test_recommendation_blurb_prefers_hotel_introduction_over_templated_scorer_summary(): void
+    {
+        $hotel = new Hotel([
+            'hotel_name' => 'Xanadu Resort Hotel Belek',
+            'destination_name' => 'Antalya Area',
+            'introduction_snippet' => 'A luxury five-star beachfront resort with extensive pools, spa facilities, and a private stretch of sand. Family-friendly dining and evening entertainment are included year-round.',
+        ]);
+        $package = new HolidayPackage(['nights' => 7, 'price_total' => 2000, 'price_per_person' => 1000, 'provider_url' => '/x']);
+        $package->setRelation('hotel', $hotel);
+        $package->setRelation('providerSource', new ProviderSource(['name' => 'Jet2']));
+
+        $scored = new ScoredHolidayOption;
+        $scored->id = 1;
+        $scored->overall_score = 7.5;
+        $scored->rank_position = 1;
+        $scored->is_disqualified = false;
+        $scored->recommendation_summary = 'Solid fit: Xanadu Resort Hotel Belek in Antalya Area scores 7.5/10. Strong value for this holiday type';
+        $scored->recommendation_reasons = ['Some reason'];
+        $scored->warning_flags = [];
+        $scored->setRelation('holidayPackage', $package);
+
+        $blurb = ResultCardViewModel::fromModel($scored)->recommendationBlurb;
+
+        $this->assertStringContainsString('five-star beachfront', $blurb);
+        $this->assertStringNotContainsString('Solid fit:', $blurb);
+    }
+
+    public function test_recommendation_blurb_uses_reasons_instead_of_templated_scorer_summary_when_no_intro(): void
+    {
+        $hotel = new Hotel([
+            'hotel_name' => 'Test Hotel',
+            'destination_name' => 'Majorca',
+        ]);
+        $package = new HolidayPackage(['nights' => 7, 'price_total' => 2000, 'price_per_person' => 1000, 'provider_url' => '/x']);
+        $package->setRelation('hotel', $hotel);
+        $package->setRelation('providerSource', new ProviderSource(['name' => 'Jet2']));
+
+        $scored = new ScoredHolidayOption;
+        $scored->id = 1;
+        $scored->overall_score = 7.5;
+        $scored->rank_position = 1;
+        $scored->is_disqualified = false;
+        $scored->recommendation_summary = 'Solid fit: Test Hotel in Majorca scores 7.5/10. Value line';
+        $scored->recommendation_reasons = ['Competitive package price for this board and season', 'Kids club on site'];
+        $scored->warning_flags = [];
+        $scored->setRelation('holidayPackage', $package);
+
+        $blurb = ResultCardViewModel::fromModel($scored)->recommendationBlurb;
+
+        $this->assertStringContainsString('Kids club on site', $blurb);
+        $this->assertStringNotContainsString('Solid fit:', $blurb);
+    }
 }

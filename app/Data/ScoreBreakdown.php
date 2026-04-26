@@ -13,6 +13,7 @@ final readonly class ScoreBreakdown
         public float $overallScore,
         public float $travelScore,
         public float $valueScore,
+        public float $reviewsScore,
         public float $familyFitScore,
         public float $locationScore,
         public float $boardScore,

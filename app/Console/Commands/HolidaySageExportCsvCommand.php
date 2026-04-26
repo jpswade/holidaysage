@@ -8,7 +8,6 @@ use App\Models\ScoredHolidayOption;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\DB;
 
 class HolidaySageExportCsvCommand extends Command
 {
@@ -26,6 +25,7 @@ class HolidaySageExportCsvCommand extends Command
         'SC' => 'Self Catering',
         'RO' => 'Room Only',
     ];
+
     /** @var list<string> */
     private const BOARD_PRIORITY = ['AI', 'FB', 'HB', 'BB', 'SC', 'RO'];
 
@@ -110,6 +110,7 @@ class HolidaySageExportCsvCommand extends Command
                 's.board_score',
                 's.location_score',
                 's.value_score',
+                's.reviews_score',
                 's.disqualification_reasons',
             ])
             ->whereHas('providerSource', fn (Builder $q) => $q->where('key', $providerKey))
@@ -213,7 +214,7 @@ class HolidaySageExportCsvCommand extends Command
                 'score_kids' => $package->getAttribute('family_fit_score'),
                 'score_board' => $package->getAttribute('board_score'),
                 'score_walkability' => $package->getAttribute('location_score'),
-                'score_reviews' => '',
+                'score_reviews' => $this->formatScoreDimension($package->getAttribute('reviews_score')),
                 'score_accessibility' => '',
                 'score_value' => $package->getAttribute('value_score'),
                 'score_aesthetics' => '',
@@ -264,6 +265,7 @@ class HolidaySageExportCsvCommand extends Command
         if (isset(self::BOARD_LABELS[$v])) {
             return self::BOARD_LABELS[$v];
         }
+
         return match (true) {
             is_numeric($v) && isset(self::BOARD_LABELS[$v]) => self::BOARD_LABELS[$v],
             str_contains($v, 'ALL') => self::BOARD_LABELS['AI'],
@@ -339,5 +341,17 @@ class HolidaySageExportCsvCommand extends Command
         $formatted = number_format($num, 2, '.', '');
 
         return rtrim(rtrim($formatted, '0'), '.');
+    }
+
+    private function formatScoreDimension(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+        if (! is_numeric($value)) {
+            return '';
+        }
+
+        return number_format((float) $value, 2, '.', '');
     }
 }

@@ -4,6 +4,7 @@ namespace App\ViewModels;
 
 use App\Models\ScoredHolidayOption;
 use App\Support\BoardBasisDisplay;
+use Illuminate\Support\Str;
 
 class ResultCardViewModel
 {
@@ -88,6 +89,7 @@ class ResultCardViewModel
             providerUrl: $package?->provider_url,
             recommendationSummary: $row->recommendation_summary,
             recommendationBlurb: self::buildRecommendationBlurb(
+                $hotel?->introduction_snippet !== null ? (string) $hotel->introduction_snippet : null,
                 $row->recommendation_summary,
                 $reasonsList,
                 $review,
@@ -105,9 +107,14 @@ class ResultCardViewModel
     }
 
     /**
+     * Primary editorial copy: prefer the provider/hotel description (e.g. Jet2 intro text), which
+     * matches the v0 “long paragraph” style. The scorer’s {@see recommendation_summary} is often
+     * a short “Solid fit:” template — that should not win when richer hotel copy exists.
+     *
      * @param  list<string>  $reasons
      */
     private static function buildRecommendationBlurb(
+        ?string $introductionSnippet,
         ?string $summary,
         array $reasons,
         ?string $review,
@@ -115,8 +122,13 @@ class ResultCardViewModel
         ?string $boardType,
         string $hotelName,
     ): string {
+        $editorial = self::normaliseEditorialIntro($introductionSnippet);
+        if ($editorial !== '') {
+            return $editorial;
+        }
+
         $summary = trim((string) $summary);
-        if ($summary !== '') {
+        if ($summary !== '' && ! self::isTemplatedScorerSummary($summary)) {
             return $summary;
         }
 
@@ -150,7 +162,38 @@ class ResultCardViewModel
             return 'Why it stands out: '.self::conjunctionFromBits($bits).'.';
         }
 
+        if ($summary !== '') {
+            return $summary;
+        }
+
         return 'A strong all-round match for this search: we balance price, reviews, and how well the property fits the preferences you set.';
+    }
+
+    private const MAX_INTRO_LENGTH = 520;
+
+    /**
+     * Plain text from the hotel’s introduction snippet, trimmed to card-friendly length.
+     */
+    private static function normaliseEditorialIntro(?string $text): string
+    {
+        if ($text === null) {
+            return '';
+        }
+        $t = trim(preg_replace('/\s+/u', ' ', strip_tags($text)) ?? '');
+        if (mb_strlen($t) < 30) {
+            return '';
+        }
+
+        return Str::limit($t, self::MAX_INTRO_LENGTH, '…');
+    }
+
+    /**
+     * The default {@see \App\Services\Scoring\DefaultHolidayScorer} summary: factual but not editorial.
+     * Keep it as a last resort so recommendation_reasons and destination copy can read better first.
+     */
+    private static function isTemplatedScorerSummary(string $summary): bool
+    {
+        return str_starts_with(strtolower($summary), 'solid fit:');
     }
 
     /**

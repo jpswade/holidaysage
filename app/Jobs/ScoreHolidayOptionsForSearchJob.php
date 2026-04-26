@@ -91,6 +91,7 @@ class ScoreHolidayOptionsForSearchJob implements ShouldQueue
                     'overall_score' => $b->overallScore,
                     'travel_score' => $b->travelScore,
                     'value_score' => $b->valueScore,
+                    'reviews_score' => $b->reviewsScore,
                     'family_fit_score' => $b->familyFitScore,
                     'location_score' => $b->locationScore,
                     'board_score' => $b->boardScore,
