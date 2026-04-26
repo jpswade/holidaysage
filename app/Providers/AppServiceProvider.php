@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Contracts\HolidayScorer;
+use App\Services\ProviderImport\Jet2SmartSearchHttpClient;
 use App\Services\Scoring\DefaultHolidayScorer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
@@ -24,6 +25,8 @@ class AppServiceProvider extends ServiceProvider
             HolidayScorer::class,
             DefaultHolidayScorer::class
         );
+
+        $this->app->singleton(Jet2SmartSearchHttpClient::class);
     }
 
     /**

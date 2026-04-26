@@ -37,7 +37,7 @@ class Jet2LiveImporterFixtureTest extends TestCase
             'status' => 'active',
         ]);
 
-        $importer = new Jet2LiveImporter;
+        $importer = $this->app->make(Jet2LiveImporter::class);
         $decoded = json_decode($fixture, true);
         $this->assertIsArray($decoded);
         $method = new \ReflectionMethod($importer, 'candidatesFromApiJson');
@@ -115,7 +115,7 @@ class Jet2LiveImporterFixtureTest extends TestCase
             ],
         ];
 
-        $importer = new Jet2LiveImporter;
+        $importer = $this->app->make(Jet2LiveImporter::class);
         $method = new \ReflectionMethod($importer, 'candidatesFromApiJson');
         $method->setAccessible(true);
         $candidates = $method->invoke($importer, $payload, $search, $provider, $search->provider_import_url);
@@ -192,7 +192,7 @@ class Jet2LiveImporterFixtureTest extends TestCase
             ],
         ];
 
-        $importer = new Jet2LiveImporter;
+        $importer = $this->app->make(Jet2LiveImporter::class);
         $method = new \ReflectionMethod($importer, 'candidatesFromApiJson');
         $method->setAccessible(true);
         $candidates = $method->invoke($importer, $payload, $search, $provider, $search->provider_import_url);

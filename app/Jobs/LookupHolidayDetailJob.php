@@ -8,6 +8,7 @@ use App\Models\SavedHolidaySearchRun;
 use App\Services\Hotels\HotelImageService;
 use App\Services\Normalisation\HolidayOptionNormaliser;
 use App\Services\ProviderImport\ProviderDetailPageParserResolver;
+use App\Support\SyncRunProgress;
 use GuzzleHttp\Handler\StreamHandler;
 use GuzzleHttp\HandlerStack;
 use Illuminate\Bus\Batchable;
@@ -94,6 +95,8 @@ class LookupHolidayDetailJob implements ShouldQueue
             'packages_upserted' => count($createdIds),
             'provider_url' => $detailUrl,
         ]);
+
+        SyncRunProgress::subTick();
     }
 
     /**

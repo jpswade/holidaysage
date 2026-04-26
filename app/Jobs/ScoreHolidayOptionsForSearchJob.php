@@ -10,6 +10,8 @@ use App\Models\SavedHolidaySearchRun;
 use App\Models\ScoredHolidayOption;
 use App\Services\Providers\ProviderSourceResolver;
 use App\Support\SavedHolidaySearchDisplayName;
+use App\Support\SyncQueueLine;
+use App\Support\SyncRunProgress;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -36,6 +38,7 @@ class ScoreHolidayOptionsForSearchJob implements ShouldQueue
         }
 
         try {
+            SyncQueueLine::line('Run #'.$run->id.': scoring ranked options…');
             ScoredHolidayOption::query()
                 ->where('saved_holiday_search_run_id', $run->id)
                 ->delete();
@@ -127,7 +130,9 @@ class ScoreHolidayOptionsForSearchJob implements ShouldQueue
                 'run_id' => $run->id,
                 'scored' => count($rows),
             ]);
+            SyncRunProgress::finishAll();
         } catch (Throwable $e) {
+            SyncRunProgress::onFailure($e);
             $run->status = SavedHolidaySearchRunStatus::Failed;
             $run->finished_at = now();
             $run->error_message = $e->getMessage();

@@ -6,11 +6,16 @@ use App\Enums\SavedHolidaySearchRunStatus;
 use App\Models\SavedHolidaySearch;
 use App\Models\SavedHolidaySearchRun;
 use App\Models\ScoredHolidayOption;
+use App\Services\ProviderImport\Jet2SmartSearchHttpClient;
 use Database\Seeders\ProviderSourceSeeder;
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\ConnectException as GuzzleConnectException;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Request as Psr7Request;
+use GuzzleHttp\Psr7\Response as Psr7Response;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class HolidaySageRunCommandTest extends TestCase
@@ -38,9 +43,9 @@ class HolidaySageRunCommandTest extends TestCase
     {
         $this->seed(ProviderSourceSeeder::class);
         Config::set('holidaysage.import_use_stub', false);
-        Http::fake([
-            'www.jet2holidays.com/api/jet2/smartsearch/search*' => Http::response('nope', 503),
-        ]);
+        $this->fakeJet2Http(new MockHandler([
+            new Psr7Response(503, [], 'nope'),
+        ]));
 
         $this->artisan('holidaysage:run', [
             'url' => $this->searchResultsUrl(),
@@ -57,9 +62,12 @@ class HolidaySageRunCommandTest extends TestCase
     {
         $this->seed(ProviderSourceSeeder::class);
         Config::set('holidaysage.import_use_stub', false);
-        Http::fake(function () {
-            throw new ConnectionException('connection timed out');
-        });
+        $this->fakeJet2Http(new MockHandler([
+            new GuzzleConnectException(
+                'connection timed out',
+                new Psr7Request('GET', 'https://www.jet2holidays.com/api/jet2/smartsearch/search')
+            ),
+        ]));
 
         $this->artisan('holidaysage:run', [
             'url' => $this->searchResultsUrl(),
@@ -75,9 +83,9 @@ class HolidaySageRunCommandTest extends TestCase
     {
         $this->seed(ProviderSourceSeeder::class);
         Config::set('holidaysage.import_use_stub', false);
-        Http::fake([
-            'www.jet2holidays.com/api/jet2/smartsearch/search*' => Http::response(json_encode(['results' => []]), 200),
-        ]);
+        $this->fakeJet2Http(new MockHandler([
+            new Psr7Response(200, [], json_encode(['results' => []])),
+        ]));
 
         $this->artisan('holidaysage:run', [
             'url' => $this->searchResultsUrl(),
@@ -94,13 +102,11 @@ class HolidaySageRunCommandTest extends TestCase
         $this->seed(ProviderSourceSeeder::class);
         Config::set('holidaysage.import_use_stub', false);
 
-        // Jet2LiveImporter uses Http::retry(3, 1000, ...): three attempts; all must be non-2xx to fail.
-        Http::fake([
-            'www.jet2holidays.com/api/jet2/smartsearch/search*' => Http::sequence()
-                ->push('busy', 503)
-                ->push('still busy', 503)
-                ->push('still busy', 503),
-        ]);
+        $this->fakeJet2Http(new MockHandler([
+            new Psr7Response(503, [], 'busy'),
+            new Psr7Response(503, [], 'still busy'),
+            new Psr7Response(503, [], 'still busy'),
+        ]));
 
         $this->artisan('holidaysage:run', [
             'url' => $this->searchResultsUrl(),
@@ -163,5 +169,15 @@ class HolidaySageRunCommandTest extends TestCase
     private function searchResultsUrl(): string
     {
         return 'https://www.jet2holidays.com/search/results?airport=98&date=25-07-2026&duration=10&occupancy=r2c_r2c1_4&destination=39&sortorder=1&page=1&boardbasis=5_2_3';
+    }
+
+    private function fakeJet2Http(MockHandler $handler): void
+    {
+        $this->app->instance(
+            Jet2SmartSearchHttpClient::class,
+            new Jet2SmartSearchHttpClient(
+                new Client(['handler' => HandlerStack::create($handler)])
+            )
+        );
     }
 }

@@ -11,6 +11,8 @@ use App\Services\ProviderImport\ProviderImportResult;
 use App\Services\ProviderImport\ProviderSearchBuilderResolver;
 use App\Services\ProviderImport\StubSnapshotData;
 use App\Services\Providers\ProviderSourceResolver;
+use App\Support\SyncQueueLine;
+use App\Support\SyncRunProgress;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -24,13 +26,14 @@ class ImportProviderResultsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    /** Horizon worker timeout must be >= this; Jet2 live smart search can be slow (see Jet2LiveImporter HTTP timeouts). */
-    public int $timeout = 180;
+    public int $timeout = 90;
 
     public function __construct(
         public int $runId,
         public int $searchId,
-    ) {}
+    ) {
+        $this->timeout = (int) config('holidaysage.jet2.import_job_timeout', 90);
+    }
 
     public function handle(
         ProviderSourceResolver $providerResolver,
@@ -47,6 +50,11 @@ class ImportProviderResultsJob implements ShouldQueue
             $provider = $providerResolver->forSearch($search);
             $sourceUrl = $builderResolver->for($provider)->build($search, $provider);
 
+            SyncQueueLine::line('Run #'.$this->runId.': import from '.$provider->key.' (job timeout '.$this->timeout.'s)…');
+            if (! (bool) config('holidaysage.import_use_stub', true)) {
+                SyncQueueLine::line('Requesting live provider results (this step blocks until the response arrives)…');
+            }
+
             $useStub = (bool) config('holidaysage.import_use_stub', true);
             if ($useStub) {
                 $result = new ProviderImportResult(
@@ -58,6 +66,7 @@ class ImportProviderResultsJob implements ShouldQueue
                 $result = $importerResolver->for($provider)->import($sourceUrl, $search, $provider);
             }
 
+            SyncQueueLine::line('Run #'.$this->runId.': import response received, writing snapshot and dispatching parse…');
             $snapshotData = $result->toSnapshotPayload();
             $raw = json_encode($snapshotData, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
             $hash = hash('sha256', $raw);
@@ -91,8 +100,10 @@ class ImportProviderResultsJob implements ShouldQueue
                 'candidates' => $estimate,
             ]);
 
+            SyncRunProgress::next('Run #'.$this->runId.': import complete — reading snapshot…');
             ParseProviderSnapshotJob::dispatch($snapshot->id);
         } catch (Throwable $e) {
+            SyncRunProgress::onFailure($e);
             $this->markFailed($run, $e);
             throw $e;
         }
