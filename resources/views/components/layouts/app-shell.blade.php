@@ -1,4 +1,4 @@
-@props(['title' => 'HolidaySage'])
+@props(['title' => 'HolidaySage', 'contentMax' => 'max-w-6xl'])
 
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -15,7 +15,7 @@
         <div class="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgba(14,165,233,0.09),transparent_50%),radial-gradient(ellipse_90%_60%_at_100%_0%,rgba(20,184,166,0.05),transparent_45%)]"></div>
         <div class="relative min-h-screen">
             <header class="border-b border-slate-200/80 bg-white/90 backdrop-blur">
-                <div class="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
+                <div class="mx-auto flex w-full items-center justify-between px-6 py-4 {{ $contentMax }}">
                     <a href="{{ route('home') }}" class="flex items-center gap-3">
                         <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-teal-600 text-white shadow-sm">
                             <x-lucide-compass class="h-5 w-5" />
@@ -32,7 +32,7 @@
                     </nav>
                 </div>
             </header>
-            <main class="mx-auto w-full max-w-6xl px-6 py-8 md:py-10">
+            <main class="mx-auto w-full {{ $contentMax }} px-6 py-6 md:py-8">
                 @if (session('status'))
                     <div class="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
                         {{ session('status') }}
@@ -40,7 +40,7 @@
                 @endif
                 {{ $slot }}
             </main>
-            <footer class="mx-auto w-full max-w-6xl px-6 pb-10 pt-4 text-sm text-slate-500">
+            <footer class="mx-auto w-full {{ $contentMax }} px-6 pb-10 pt-4 text-sm text-slate-500">
                 <div class="flex flex-col items-center justify-between gap-3 border-t border-slate-200 pt-5 text-center sm:flex-row sm:text-left">
                     <div class="flex items-center gap-2">
                         <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-teal-600 text-white shadow-sm">

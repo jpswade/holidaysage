@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\BrowseDemoCatalogue;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class HolidayBrowseController extends Controller
@@ -81,9 +83,28 @@ class HolidayBrowseController extends Controller
         ];
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
+        $all = BrowseDemoCatalogue::items();
+        $provider = strtolower((string) $request->query('provider', 'all'));
+        if (! in_array($provider, ['all', 'jet2', 'tui'], true)) {
+            $provider = 'all';
+        }
+        $board = (string) $request->query('board', 'all');
+        if (! in_array($board, ['all', 'all_inclusive', 'half_board', 'bed_breakfast', 'self_catering', 'other'], true)) {
+            $board = 'all';
+        }
+        $q = (string) $request->query('q', '');
+
+        $holidays = BrowseDemoCatalogue::filter($all, $provider, $board, $q);
+
         return view('holidays.index', [
+            'holidays' => $holidays,
+            'holidaysTotal' => count($all),
+            'holidaysShown' => count($holidays),
+            'filterProvider' => $provider,
+            'filterBoard' => $board,
+            'filterQuery' => $q,
             'destinationShortcuts' => self::destinationShortcuts(),
             'themeShortcuts' => self::themeShortcuts(),
             'tripIdeaShortcuts' => self::tripIdeaShortcuts(),

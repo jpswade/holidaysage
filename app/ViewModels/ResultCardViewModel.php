@@ -27,6 +27,10 @@ class ResultCardViewModel
         public readonly ?string $boardType,
         public readonly ?string $providerUrl,
         public readonly ?string $recommendationSummary,
+        /**
+         * Primary paragraph for the card: prefer model summary, else join reasons, else a short fallback.
+         */
+        public readonly string $recommendationBlurb,
         public readonly array $reasons,
         public readonly array $warnings,
         public readonly array $featureChips,
@@ -65,6 +69,8 @@ class ResultCardViewModel
 
         $priceTotal = $package ? '£'.number_format((float) $package->price_total, 0) : 'Price unavailable';
         $pricePerPerson = $package?->price_per_person !== null ? '£'.number_format((float) $package->price_per_person, 0).' per person' : null;
+        $reasonsList = array_values(array_filter(array_map('strval', $row->recommendation_reasons ?? [])));
+        $boardLabel = BoardBasisDisplay::humanLabel($package?->board_type, $package?->board_recommended);
 
         return new self(
             id: $row->id,
@@ -78,16 +84,92 @@ class ResultCardViewModel
             nights: $package ? (int) $package->nights.' nights' : 'Nights unavailable',
             flightOutbound: $package?->flight_outbound_duration_minutes ? self::minutesToText((int) $package->flight_outbound_duration_minutes) : null,
             transfer: $package?->transfer_minutes ? (int) $package->transfer_minutes.' min transfer' : null,
-            boardType: BoardBasisDisplay::humanLabel($package?->board_type, $package?->board_recommended),
+            boardType: $boardLabel,
             providerUrl: $package?->provider_url,
             recommendationSummary: $row->recommendation_summary,
-            reasons: array_values(array_filter(array_map('strval', $row->recommendation_reasons ?? []))),
+            recommendationBlurb: self::buildRecommendationBlurb(
+                $row->recommendation_summary,
+                $reasonsList,
+                $review,
+                $hotel?->destination_name ? (string) $hotel->destination_name : '',
+                $boardLabel,
+                $hotel?->hotel_name ? (string) $hotel->hotel_name : 'This hotel',
+            ),
+            reasons: $reasonsList,
             warnings: array_values(array_filter(array_map('strval', $row->warning_flags ?? []))),
             featureChips: $featureChips,
             review: $review,
             imageUrl: $hotel?->primaryImageUrlForDisplay(),
             isDisqualified: (bool) $row->is_disqualified,
         );
+    }
+
+    /**
+     * @param  list<string>  $reasons
+     */
+    private static function buildRecommendationBlurb(
+        ?string $summary,
+        array $reasons,
+        ?string $review,
+        string $destinationName,
+        ?string $boardType,
+        string $hotelName,
+    ): string {
+        $summary = trim((string) $summary);
+        if ($summary !== '') {
+            return $summary;
+        }
+
+        $reasons = array_values(array_filter(
+            array_map(trim(...), $reasons),
+            fn (string $s): bool => $s !== ''
+        ));
+        if ($reasons !== []) {
+            if (count($reasons) === 1) {
+                return $reasons[0].'.';
+            }
+            if (count($reasons) === 2) {
+                return $reasons[0].' and '.$reasons[1].'.';
+            }
+            $last = array_pop($reasons);
+
+            return implode(', ', $reasons).', and '.$last.'.';
+        }
+
+        $bits = [];
+        if ($review !== null && $review !== '') {
+            $bits[] = 'guest ratings '.$review;
+        }
+        if (is_string($boardType) && $boardType !== '') {
+            $bits[] = $boardType;
+        }
+        if ($destinationName !== '') {
+            $bits[] = 'a strong setting in '.$destinationName;
+        }
+        if ($bits !== []) {
+            return 'Why it stands out: '.self::conjunctionFromBits($bits).'.';
+        }
+
+        return 'A strong all-round match for this search: we balance price, reviews, and how well the property fits the preferences you set.';
+    }
+
+    /**
+     * @param  list<string>  $bits
+     */
+    private static function conjunctionFromBits(array $bits): string
+    {
+        if (count($bits) === 0) {
+            return '';
+        }
+        if (count($bits) === 1) {
+            return $bits[0];
+        }
+        if (count($bits) === 2) {
+            return $bits[0].' and '.$bits[1];
+        }
+        $last = array_pop($bits);
+
+        return implode(', ', $bits).', and '.$last;
     }
 
     private static function minutesToText(int $minutes): string

@@ -40,10 +40,26 @@ class FrontendCustomerPagesTest extends TestCase
         $response = $this->get(route('holidays.index'));
 
         $response->assertOk();
-        $response->assertSeeText('Browse holidays your way');
-        $response->assertSeeText('Popular destinations');
+        $response->assertSeeText('Browse holidays');
+        $response->assertSeeText('Showing 18 of 18 holidays');
+        $response->assertSeeText('Ikos Dassia', false);
+        $response->assertSeeText('Filters', false);
+        $response->assertSeeText('More filters', false);
+        $response->assertSeeText('View Deal', false);
+        $response->assertSeeText('Example listings for layout only', false);
         $response->assertSee(route('searches.create'));
         $response->assertSee(route('searches.index'));
+    }
+
+    public function test_browse_holidays_filters_narrow_results(): void
+    {
+        $response = $this->get(route('holidays.index', [
+            'board' => 'self_catering',
+        ]));
+
+        $response->assertOk();
+        $response->assertSeeText('Showing 1 of 18 holidays');
+        $response->assertSee('HD Parque Cristobal', false);
     }
 
     public function test_create_search_prefills_from_browse_query_string(): void

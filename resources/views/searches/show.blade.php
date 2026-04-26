@@ -42,10 +42,11 @@
             <div>
                 @if ($results->total() > 0)
                     <h2 class="text-3xl font-semibold tracking-tight text-slate-900">Top {{ number_format($results->total()) }} recommended options</h2>
-                    <p class="mt-1 text-lg text-slate-600">
-                        Ranked by match score based on your preferences
+                    <p class="mt-2 max-w-2xl text-lg leading-relaxed text-slate-600">
+                        We order these holidays by how well they fit what you told us—dates, party, budget, and the features you care about. Each card explains why it made your shortlist.
                         @if ($results->hasPages())
-                            <span class="text-slate-500">·</span>
+                            <span class="text-slate-500"> </span>
+                            <span class="whitespace-nowrap text-slate-500">·</span>
                             <span class="text-slate-600">Showing {{ number_format($results->firstItem()) }}–{{ number_format($results->lastItem()) }} of {{ number_format($results->total()) }}</span>
                         @endif
                     </p>

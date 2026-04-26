@@ -37,8 +37,6 @@
             </div>
         </div>
 
-        <div class="mt-3 text-base tracking-wide text-amber-500">★★★★★</div>
-
         <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-700">
             <span class="inline-flex items-center gap-1"><x-lucide-plane class="h-4 w-4 text-slate-400" />{{ $card->flightOutbound ?: 'Pending' }}</span>
             <span class="inline-flex items-center gap-1"><x-lucide-clock-3 class="h-4 w-4 text-slate-400" />{{ $card->transfer ?: 'Pending' }}</span>
@@ -55,9 +53,9 @@
             </div>
         @endif
 
-        @if ($card->recommendationSummary)
-            <p class="mt-4 text-sm leading-relaxed text-slate-600">{{ $card->recommendationSummary }}</p>
-        @endif
+        <p class="mt-4 border-l-2 border-teal-200/80 pl-4 text-base leading-relaxed text-slate-700">
+            {{ $card->recommendationBlurb }}
+        </p>
 
         <div class="mt-4 flex items-end justify-between gap-3 border-t border-slate-200 pt-4">
             <div>
