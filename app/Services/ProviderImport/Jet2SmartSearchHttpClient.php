@@ -108,6 +108,7 @@ class Jet2SmartSearchHttpClient
             'http_errors' => false,
             'allow_redirects' => true,
             'decode_content' => true,
+            'curl' => $this->sharedCurlOptions(),
         ];
     }
 
@@ -189,16 +190,15 @@ class Jet2SmartSearchHttpClient
         $requestTimeout = (int) max(1, (int) round($t['request']));
         $connectTimeout = (int) max(1, (int) round($t['connect']));
 
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_HTTPHEADER => $this->toCurlHeaderLines($this->browserLikeHeadersForApiGet()),
-            CURLOPT_TIMEOUT => $requestTimeout,
-            CURLOPT_CONNECTTIMEOUT => $connectTimeout,
-            CURLOPT_ENCODING => '',
-            CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-        ]);
+        $opts = $this->sharedCurlOptions();
+        $opts[CURLOPT_URL] = $url;
+        $opts[CURLOPT_RETURNTRANSFER] = true;
+        $opts[CURLOPT_FOLLOWLOCATION] = true;
+        $opts[CURLOPT_HTTPHEADER] = $this->toCurlHeaderLines($this->browserLikeHeadersForApiGet());
+        $opts[CURLOPT_TIMEOUT] = $requestTimeout;
+        $opts[CURLOPT_CONNECTTIMEOUT] = $connectTimeout;
+
+        curl_setopt_array($ch, $opts);
 
         $body = curl_exec($ch);
         if ($body === false) {
@@ -214,6 +214,23 @@ class Jet2SmartSearchHttpClient
         }
 
         return new Response(new \GuzzleHttp\Psr7\Response($status, [], $body));
+    }
+
+    /**
+     * Keep Guzzle and ext-curl on the same transport behaviour (this is the main reason the
+     * fallback was historically more “browser-like” than the primary path).
+     *
+     * @return array<int, mixed>
+     */
+    private function sharedCurlOptions(): array
+    {
+        return [
+            // Match the ext-curl fallback: let libcurl handle Content-Encoding, force IPv4, and
+            // keep HTTP/1.1 (avoids subtle transport differences vs opportunistic HTTP/2).
+            CURLOPT_ENCODING => '',
+            CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        ];
     }
 
     /**

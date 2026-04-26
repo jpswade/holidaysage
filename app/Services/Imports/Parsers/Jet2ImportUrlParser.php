@@ -4,6 +4,8 @@ namespace App\Services\Imports\Parsers;
 
 use App\Contracts\ImportUrlParser;
 use App\Services\Imports\Parsers\Concerns\NormalisesQueryParams;
+use App\Support\Jet2DestinationAreaIdList;
+use App\Support\Jet2OccupancyQuery;
 use Carbon\Carbon;
 
 /**
@@ -52,7 +54,7 @@ class Jet2ImportUrlParser implements ImportUrlParser
         }
 
         $dep = $this->getQueryValue($q, [
-            'outbounddate', 'departuredate', 'outbound', 'outdate', 'depdate', 'fromdate', 'outboundfromdate', 'inboundoutbound', 'journeydate', 'holidate',
+            'outbounddate', 'departuredate', 'outbound', 'outdate', 'depdate', 'date', 'fromdate', 'outboundfromdate', 'inboundoutbound', 'journeydate', 'holidate',
         ]);
         if ($dep && $date = $this->tryParseDate($dep)) {
             $criteria['travel_start_date'] = $date;
@@ -83,9 +85,45 @@ class Jet2ImportUrlParser implements ImportUrlParser
             $criteria['board_preferences'] = $this->boardHintsFromString($room);
         }
 
-        $dest = $this->getQueryValue($q, ['destinationid', 'resort', 'arrivalid', 'location', 'holidateto']);
+        $dest = $this->getQueryValue($q, ['destinationid', 'destination', 'resort', 'arrivalid', 'location', 'holidateto']);
         if ($dest !== null && $dest !== '') {
-            $criteria['destination_preferences'] = [$dest];
+            $asIds = Jet2DestinationAreaIdList::parse($dest);
+            if ($asIds !== []) {
+                $criteria['provider_destination_ids'] = [
+                    'jet2' => $asIds,
+                ];
+            } else {
+                $criteria['destination_preferences'] = [$dest];
+            }
+        }
+
+        $occ = $this->getQueryValue($q, ['occupancy', 'roomoccupancy']);
+        if (is_string($occ) && $occ !== '') {
+            $criteria['provider_occupancy'] = [
+                'jet2' => $occ,
+            ];
+            if ($totals = Jet2OccupancyQuery::totals($occ)) {
+                $criteria['adults'] = $totals['adults'];
+                $criteria['children'] = $totals['children'];
+                $criteria['infants'] = $totals['infants'];
+            }
+        }
+
+        $jet2UrlParams = [];
+        $wireParamKeys = [
+            'airport', 'boardbasis', 'facility', 'starrating', 'outboundflighttimes', 'inboundflighttimes',
+            'feature', 'sortorder', 'page', 'sr',
+        ];
+        foreach ($wireParamKeys as $paramKey) {
+            $v = $this->getQueryValue($q, [$paramKey]);
+            if (is_string($v) && $v !== '') {
+                $jet2UrlParams[$paramKey] = $v;
+            }
+        }
+        if ($jet2UrlParams !== []) {
+            $criteria['provider_url_params'] = [
+                'jet2' => $jet2UrlParams,
+            ];
         }
 
         return $criteria;
@@ -129,7 +167,7 @@ class Jet2ImportUrlParser implements ImportUrlParser
         if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m)) {
             return $m[1].'-'.$m[2].'-'.$m[3];
         }
-        if (preg_match('/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/', $value, $m)) {
+        if (preg_match('/^(\d{1,2})[-.\/](\d{1,2})[-.\/](\d{4})$/', $value, $m)) {
             return Carbon::createFromDate((int) $m[3], (int) $m[2], (int) $m[1])->toDateString();
         }
         if (preg_match('/^(\d{2})(\d{2})(\d{4})$/', $value, $m)) {

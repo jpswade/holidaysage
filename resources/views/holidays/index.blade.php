@@ -1,11 +1,12 @@
 @php
     $hasActiveFilters = ($filterQuery ?? '') !== '' || ($filterProvider ?? 'all') !== 'all' || ($filterBoard ?? 'all') !== 'all';
+    $holidaysTotal = (int) ($holidaysTotal ?? 0);
 @endphp
 
 <x-layouts.app-shell title="Browse holidays - HolidaySage" contentMax="max-w-7xl">
     <h1 class="sr-only">Browse holidays</h1>
 
-    <form method="get" action="{{ route('holidays.index') }}" class="mb-6 space-y-3" id="browse-filters" aria-label="Filter example holidays">
+    <form method="get" action="{{ route('holidays.index') }}" class="mb-6 space-y-3" id="browse-filters" aria-label="Filter holidays">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex flex-wrap items-center gap-2">
                 <details
@@ -73,7 +74,7 @@
                                 name="q"
                                 value="{{ $filterQuery ?? '' }}"
                                 class="min-w-0 flex-1 rounded-lg border-slate-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500"
-                                placeholder="e.g. Corfu, Ikos, Tenerife"
+                                placeholder="Hotel or destination"
                             />
                             <button
                                 type="submit"
@@ -92,7 +93,9 @@
         @endif
     </form>
 
-    <p class="mb-6 text-xs text-slate-500">Example listings for layout only — not live prices or availability.</p>
+    @if ($holidaysTotal > 0)
+        <p class="mb-6 text-xs text-slate-500">Deals and prices reflect your saved-search imports. Availability and pricing on the provider site is authoritative.</p>
+    @endif
 
     <div class="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-5 lg:gap-6">
         @forelse ($holidays as $holiday)
@@ -100,9 +103,15 @@
         @empty
             <div class="md:col-span-2">
                 <div class="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
-                    <p class="text-base font-medium text-slate-900">No holidays match those filters</p>
-                    <p class="mt-1 text-sm text-slate-600">Try a different search or clear filters to see the full set.</p>
-                    <a href="{{ route('holidays.index') }}" class="mt-4 inline-block text-sm font-semibold text-teal-700 hover:text-teal-800">Clear filters</a>
+                    @if ($holidaysTotal === 0)
+                        <p class="text-base font-medium text-slate-900">No results yet</p>
+                        <p class="mt-1 text-sm text-slate-600">Create a saved search, run an import, and scored holidays will appear here.</p>
+                        <a href="{{ route('searches.create') }}" class="mt-4 inline-block text-sm font-semibold text-teal-700 hover:text-teal-800">Create a search</a>
+                    @else
+                        <p class="text-base font-medium text-slate-900">No results</p>
+                        <p class="mt-1 text-sm text-slate-600">Nothing matched those filters. Try widening your search or clear filters.</p>
+                        <a href="{{ route('holidays.index') }}" class="mt-4 inline-block text-sm font-semibold text-teal-700 hover:text-teal-800">Clear filters</a>
+                    @endif
                 </div>
             </div>
         @endforelse

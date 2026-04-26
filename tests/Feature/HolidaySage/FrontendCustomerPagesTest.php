@@ -16,6 +16,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Tests\Support\Jet2UrlContract;
 use Tests\TestCase;
 
 class FrontendCustomerPagesTest extends TestCase
@@ -41,25 +42,40 @@ class FrontendCustomerPagesTest extends TestCase
 
         $response->assertOk();
         $response->assertSeeText('Browse holidays');
-        $response->assertSeeText('Showing 18 of 18 holidays');
-        $response->assertSeeText('Ikos Dassia', false);
+        $response->assertSee('0 of 0 holidays', false);
+        $response->assertSeeText('No results yet', false);
+        $response->assertSeeText('Create a search', false);
         $response->assertSeeText('Filters', false);
         $response->assertSeeText('More filters', false);
-        $response->assertSeeText('View Deal', false);
-        $response->assertSeeText('Example listings for layout only', false);
         $response->assertSee(route('searches.create'));
         $response->assertSee(route('searches.index'));
     }
 
     public function test_browse_holidays_filters_narrow_results(): void
     {
+        $this->seedBrowseHolidaysWithTwoBoardTypes();
+
         $response = $this->get(route('holidays.index', [
             'board' => 'self_catering',
         ]));
 
         $response->assertOk();
-        $response->assertSeeText('Showing 1 of 18 holidays');
-        $response->assertSee('HD Parque Cristobal', false);
+        $response->assertSee('1 of 2 holidays', false);
+        $response->assertSee('Browse Self Catering Inn', false);
+    }
+
+    public function test_browse_holidays_lists_imported_recommendations_when_data_exists(): void
+    {
+        $this->seedScoredSearch();
+        $option = ScoredHolidayOption::query()->orderBy('id')->firstOrFail();
+        $response = $this->get(route('holidays.index'));
+        $response->assertOk();
+        $response->assertSee('1 of 1 holidays', false);
+        $response->assertSee('Sunrise Family Resort', false);
+        $response->assertSee(route('searches.deals.show', [
+            'search' => $option->saved_holiday_search_id,
+            'scoredOption' => $option->id,
+        ]), false);
     }
 
     public function test_create_search_prefills_from_browse_query_string(): void
@@ -102,6 +118,44 @@ class FrontendCustomerPagesTest extends TestCase
         );
         $this->assertDoesNotMatchRegularExpression(
             '/<input\b[^>]*\bname="feature_preferences\[\]"[^>]*\bvalue="invalid_sludge"/',
+            $html,
+        );
+    }
+
+    public function test_edit_search_prefills_from_jet2_style_query_string(): void
+    {
+        $search = SavedHolidaySearch::query()->create([
+            'name' => 'Existing',
+            'slug' => 'existing-'.Str::random(6),
+            'departure_airport_code' => 'MAN',
+            'duration_min_nights' => 7,
+            'duration_max_nights' => 7,
+            'adults' => 2,
+            'children' => 0,
+            'infants' => 0,
+            'status' => 'active',
+        ]);
+
+        $q = [];
+        parse_str((string) parse_url(Jet2UrlContract::forCommandAndPrefill(), PHP_URL_QUERY), $q);
+        $url = route('searches.edit', $search);
+        $response = $this->get($url.'?'.http_build_query([
+            'date' => $q['date'] ?? '',
+            'occupancy' => $q['occupancy'] ?? '',
+        ]));
+
+        $response->assertOk();
+        $html = $response->getContent();
+        $this->assertMatchesRegularExpression(
+            '/<input\b[^>]*\bname="travel_start_date"[^>]*\bvalue="2026-07-25"/',
+            $html,
+        );
+        $this->assertMatchesRegularExpression(
+            '/<input\b[^>]*\bname="adults"[^>]*\bvalue="4"/',
+            $html,
+        );
+        $this->assertMatchesRegularExpression(
+            '/<input\b[^>]*\bname="children"[^>]*\bvalue="2"/',
             $html,
         );
     }
@@ -438,5 +492,144 @@ class FrontendCustomerPagesTest extends TestCase
         }
 
         return $search;
+    }
+
+    private function seedBrowseHolidaysWithTwoBoardTypes(): void
+    {
+        $this->seed(ProviderSourceSeeder::class);
+        $provider = ProviderSource::query()->where('key', 'jet2')->firstOrFail();
+
+        $search = SavedHolidaySearch::query()->create([
+            'name' => 'Browse board filter',
+            'slug' => 'browse-board-filter-'.Str::random(4),
+            'departure_airport_code' => 'MAN',
+            'duration_min_nights' => 7,
+            'duration_max_nights' => 7,
+            'adults' => 2,
+            'children' => 0,
+            'status' => 'active',
+            'last_scored_at' => now(),
+        ]);
+
+        $run = SavedHolidaySearchRun::query()->create([
+            'saved_holiday_search_id' => $search->id,
+            'run_type' => SavedHolidaySearchRunType::Manual,
+            'status' => SavedHolidaySearchRunStatus::Completed,
+            'started_at' => now()->subMinutes(5),
+            'finished_at' => now()->subMinutes(1),
+            'imported_holiday_package_ids' => [],
+        ]);
+
+        $hotelSc = Hotel::query()->create([
+            'provider_source_id' => $provider->id,
+            'provider_hotel_id' => 'H-BROWSE-SC',
+            'hotel_identity_hash' => hash('sha256', 'hotel-browse-sc'),
+            'hotel_name' => 'Browse Self Catering Inn',
+            'hotel_slug' => 'browse-self-catering-inn',
+            'resort_name' => 'Test Resort',
+            'destination_name' => 'Majorca',
+            'destination_country' => 'Spain',
+            'has_kids_club' => false,
+            'pools_count' => 1,
+            'review_score' => 4.0,
+            'review_count' => 5,
+            'distance_to_beach_meters' => 400,
+        ]);
+
+        $packageSc = HolidayPackage::query()->create([
+            'provider_source_id' => $provider->id,
+            'hotel_id' => $hotelSc->id,
+            'provider_option_id' => 'OPT-BROWSE-SC',
+            'provider_url' => 'https://www.jet2holidays.com/fake-sc',
+            'airport_code' => 'MAN',
+            'departure_date' => '2026-08-01',
+            'return_date' => '2026-08-08',
+            'nights' => 7,
+            'adults' => 2,
+            'children' => 0,
+            'infants' => 0,
+            'board_type' => 'SC',
+            'price_total' => 900,
+            'price_per_person' => 450,
+            'currency' => 'GBP',
+            'flight_outbound_duration_minutes' => 200,
+            'flight_inbound_duration_minutes' => 200,
+            'transfer_minutes' => 25,
+            'signature_hash' => hash('sha256', 'sig-browse-sc'),
+        ]);
+
+        ScoredHolidayOption::query()->create([
+            'saved_holiday_search_id' => $search->id,
+            'saved_holiday_search_run_id' => $run->id,
+            'holiday_package_id' => $packageSc->id,
+            'overall_score' => 8.5,
+            'travel_score' => 8.0,
+            'value_score' => 8.0,
+            'family_fit_score' => 8.0,
+            'location_score' => 8.0,
+            'board_score' => 8.0,
+            'price_score' => 8.0,
+            'is_disqualified' => false,
+            'warning_flags' => [],
+            'recommendation_summary' => 'Self catering option.',
+            'recommendation_reasons' => [],
+            'rank_position' => 1,
+        ]);
+
+        $hotelAi = Hotel::query()->create([
+            'provider_source_id' => $provider->id,
+            'provider_hotel_id' => 'H-BROWSE-AI',
+            'hotel_identity_hash' => hash('sha256', 'hotel-browse-ai'),
+            'hotel_name' => 'Browse All Inclusive Resort',
+            'hotel_slug' => 'browse-all-inclusive-resort',
+            'resort_name' => 'Test Resort',
+            'destination_name' => 'Majorca',
+            'destination_country' => 'Spain',
+            'has_kids_club' => true,
+            'pools_count' => 2,
+            'review_score' => 4.5,
+            'review_count' => 20,
+            'distance_to_beach_meters' => 100,
+        ]);
+
+        $packageAi = HolidayPackage::query()->create([
+            'provider_source_id' => $provider->id,
+            'hotel_id' => $hotelAi->id,
+            'provider_option_id' => 'OPT-BROWSE-AI',
+            'provider_url' => 'https://www.jet2holidays.com/fake-ai',
+            'airport_code' => 'MAN',
+            'departure_date' => '2026-08-01',
+            'return_date' => '2026-08-08',
+            'nights' => 7,
+            'adults' => 2,
+            'children' => 0,
+            'infants' => 0,
+            'board_type' => 'all_inclusive',
+            'price_total' => 1500,
+            'price_per_person' => 750,
+            'currency' => 'GBP',
+            'flight_outbound_duration_minutes' => 200,
+            'flight_inbound_duration_minutes' => 200,
+            'transfer_minutes' => 15,
+            'signature_hash' => hash('sha256', 'sig-browse-ai'),
+        ]);
+
+        ScoredHolidayOption::query()->create([
+            'saved_holiday_search_id' => $search->id,
+            'saved_holiday_search_run_id' => $run->id,
+            'holiday_package_id' => $packageAi->id,
+            'overall_score' => 9.0,
+            'travel_score' => 8.5,
+            'value_score' => 8.5,
+            'family_fit_score' => 8.5,
+            'location_score' => 8.5,
+            'board_score' => 8.5,
+            'price_score' => 8.5,
+            'is_disqualified' => false,
+            'warning_flags' => [],
+            'recommendation_summary' => 'All inclusive option.',
+            'recommendation_reasons' => [],
+            'rank_position' => 2,
+        ]);
     }
 }

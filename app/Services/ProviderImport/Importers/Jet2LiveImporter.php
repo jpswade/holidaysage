@@ -8,6 +8,7 @@ use App\Models\SavedHolidaySearch;
 use App\Services\ProviderImport\Importers\Concerns\ExtractsEmbeddedJson;
 use App\Services\ProviderImport\Jet2SmartSearchHttpClient;
 use App\Services\ProviderImport\ProviderImportResult;
+use App\Support\Jet2SmartsearchFilters;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 
@@ -26,7 +27,7 @@ class Jet2LiveImporter implements ProviderHttpImporter
 
     public function import(string $url, SavedHolidaySearch $search, ProviderSource $provider): ProviderImportResult
     {
-        $apiUrl = $this->buildSmartSearchApiUrl($url);
+        $apiUrl = $this->buildSmartSearchApiUrl($url, $search);
         if ($apiUrl !== null) {
             [$status, $body] = $this->fetchViaNativeHttp($apiUrl, true);
             if ($status < 200 || $status >= 300) {
@@ -37,15 +38,33 @@ class Jet2LiveImporter implements ProviderHttpImporter
                 throw new \RuntimeException('Jet2 API returned invalid JSON payload.');
             }
             $candidates = $this->candidatesFromApiJson($decoded, $search, $provider, $url);
-            if ($candidates === []) {
-                throw new \RuntimeException('Jet2 API payload did not contain holiday candidates.');
+            if ($candidates !== []) {
+                return new ProviderImportResult(
+                    responseStatus: $status,
+                    rawBody: $body,
+                    candidates: $candidates,
+                );
             }
 
-            return new ProviderImportResult(
-                responseStatus: $status,
-                rawBody: $body,
-                candidates: $candidates,
-            );
+            // Some valid API responses return 200 with zero `results`; try the results page body as fallback.
+            [$htmlStatus, $htmlBody] = $this->fetchViaNativeHttp($url, false);
+            if ($htmlStatus >= 200 && $htmlStatus < 300) {
+                $htmlCandidates = $this->candidatesFromBody($htmlBody, $search, $provider, $url);
+                if ($htmlCandidates !== []) {
+                    return new ProviderImportResult(
+                        responseStatus: $htmlStatus,
+                        rawBody: $htmlBody,
+                        candidates: $htmlCandidates,
+                    );
+                }
+            }
+
+            $totalResults = is_numeric($decoded['totalResults'] ?? null) ? (int) $decoded['totalResults'] : null;
+            if ($totalResults !== null) {
+                throw new \RuntimeException('Jet2 API returned zero candidates (totalResults='.$totalResults.').');
+            }
+
+            throw new \RuntimeException('Jet2 API payload did not contain holiday candidates.');
         }
 
         [$status, $body] = $this->fetchViaNativeHttp($url, false);
@@ -75,7 +94,7 @@ class Jet2LiveImporter implements ProviderHttpImporter
         return [$response->status(), (string) $response->body()];
     }
 
-    private function buildSmartSearchApiUrl(string $searchResultsUrl): ?string
+    private function buildSmartSearchApiUrl(string $searchResultsUrl, ?SavedHolidaySearch $search = null): ?string
     {
         $parts = parse_url($searchResultsUrl);
         $host = strtolower((string) ($parts['host'] ?? ''));
@@ -85,6 +104,9 @@ class Jet2LiveImporter implements ProviderHttpImporter
         }
 
         parse_str((string) ($parts['query'] ?? ''), $q);
+        $q = $this->mergeResultsQueryWithSavedSearch($q, $search);
+        $q = $this->strictFixtureShapeQuery($q);
+
         $airport = (string) ($q['airport'] ?? '');
         $destination = (string) ($q['destination'] ?? '');
         if ($airport === '' || $destination === '') {
@@ -96,16 +118,7 @@ class Jet2LiveImporter implements ProviderHttpImporter
         $occupancy = $this->occupancyToApi((string) ($q['occupancy'] ?? 'r2c_r2c1_4'));
         $page = (string) ($q['page'] ?? '1');
         $sortorder = (string) ($q['sortorder'] ?? '1');
-        $boardbasis = str_replace('_', '-', (string) ($q['boardbasis'] ?? '5_2_3'));
-        $facility = str_replace('_', '-', (string) ($q['facility'] ?? ''));
-        $starratingSlug = str_replace('_', '-', (string) ($q['starrating'] ?? '4'));
-
-        $filters = ['boardbasis_'.$boardbasis, 'starrating_'.$starratingSlug];
-        if ($facility !== '') {
-            $filters[] = 'facility_'.$facility;
-        }
-        $filters[] = 'inboundflighttimes_2-3';
-        $filters[] = 'outboundflighttimes_2-3';
+        $filters = Jet2SmartsearchFilters::filterSlugsFromResultsQuery($q);
         $params = http_build_query([
             'departureAirportIds' => $airport,
             'destinationAreaIds' => $destination,
@@ -126,6 +139,60 @@ class Jet2LiveImporter implements ProviderHttpImporter
         return 'https://www.jet2holidays.com/api/jet2/smartsearch/search?'.$params;
     }
 
+    /**
+     * Fills missing Jet2 result-url keys from `SavedHolidaySearch` so a partial or edited
+     * `provider_import_url` can still be resolved to the same smartsearch call.
+     *
+     * @param  array<string, mixed>  $q
+     * @return array<string, mixed>
+     */
+    private function mergeResultsQueryWithSavedSearch(array $q, ?SavedHolidaySearch $search): array
+    {
+        $q = array_change_key_case($q, CASE_LOWER);
+        if ($search === null) {
+            return $q;
+        }
+        $hasNonEmpty = static function (array $arr, string $k): bool {
+            return isset($arr[$k]) && is_string($arr[$k]) && trim($arr[$k]) !== '';
+        };
+        $fromStore = $search->provider_url_params['jet2'] ?? null;
+        if (is_array($fromStore)) {
+            foreach ($fromStore as $k => $v) {
+                if (! is_string($k) || ! is_string($v) || $v === '') {
+                    continue;
+                }
+                $k = strtolower($k);
+                if (! $hasNonEmpty($q, $k)) {
+                    $q[$k] = $v;
+                }
+            }
+        }
+        if (! $hasNonEmpty($q, 'occupancy')) {
+            $w = $search->providerOccupancyWireFor('jet2');
+            if ($w !== null) {
+                $q['occupancy'] = $w;
+            }
+        }
+        if (! $hasNonEmpty($q, 'destination') && $search->providerDestinationIdListFor('jet2') !== []) {
+            $q['destination'] = implode('_', $search->providerDestinationIdListFor('jet2'));
+        }
+        if (! $hasNonEmpty($q, 'airport')) {
+            $a = $search->providerUrlParamFor('jet2', 'airport');
+            if ($a !== null) {
+                $q['airport'] = $a;
+            }
+        }
+        if (! $hasNonEmpty($q, 'date') && $search->travel_start_date) {
+            $q['date'] = $search->travel_start_date->format('d-m-Y');
+        }
+        if (! $hasNonEmpty($q, 'duration') && $search->duration_min_nights >= 1
+            && (int) $search->duration_min_nights === (int) $search->duration_max_nights) {
+            $q['duration'] = (string) (int) $search->duration_min_nights;
+        }
+
+        return $q;
+    }
+
     private function ddmmyyyyToIso(string $d): string
     {
         if (preg_match('/^(\d{2})-(\d{2})-(\d{4})$/', $d, $m)) {
@@ -137,12 +204,15 @@ class Jet2LiveImporter implements ProviderHttpImporter
 
     private function occupancyToApi(string $s): string
     {
-        if (! str_contains($s, 'r')) {
+        if (trim($s) === '' || str_contains($s, 'c') === false) {
             return '2!2_1-4';
         }
-        $rooms = array_filter(explode('r', $s));
+        $rooms = array_map(static fn (string $r) => rtrim($r, '_'), array_filter(explode('r', $s)));
         $out = [];
         foreach ($rooms as $room) {
+            if ($room === '') {
+                continue;
+            }
             if (preg_match('/^(\d+)c(?:(\d+)_(\d+))?$/', $room, $m)) {
                 $out[] = isset($m[2]) && isset($m[3]) ? ($m[1].'_'.$m[2].'-'.$m[3]) : $m[1];
             }
@@ -152,10 +222,50 @@ class Jet2LiveImporter implements ProviderHttpImporter
     }
 
     /**
-     * Map smartsearch `results[]` to import candidates. Per-hotel `images` are produced by the detail HTML
-     * parser, not this method, until a real API JSON fixture documents image fields and a test is added
-     * (see `tests/Unit/ProviderImport/Jet2LiveImporterFixtureTest.php`).
+     * Keep request shape aligned with the checked-in Jet2 contract when enabled.
      *
+     * @param  array<string,mixed>  $q
+     * @return array<string,mixed>
+     */
+    private function strictFixtureShapeQuery(array $q): array
+    {
+        if (! (bool) config('holidaysage.jet2.strict_fixture_shape', true)) {
+            return $q;
+        }
+
+        $q = array_change_key_case($q, CASE_LOWER);
+
+        if (isset($q['destination']) && is_string($q['destination'])) {
+            $primaryDestination = $this->firstNumericUnderscoreToken($q['destination']);
+            if ($primaryDestination !== null) {
+                $q['destination'] = $primaryDestination;
+            }
+        }
+
+        // The fixture-backed request shape does not send these optional URL filters directly.
+        foreach (['facility', 'feature', 'outboundflighttimes', 'inboundflighttimes', 'starrating', 'sr'] as $dropKey) {
+            unset($q[$dropKey]);
+        }
+
+        return $q;
+    }
+
+    private function firstNumericUnderscoreToken(string $wire): ?string
+    {
+        $wire = trim($wire);
+        if ($wire === '') {
+            return null;
+        }
+        $parts = explode('_', $wire);
+        $first = trim((string) ($parts[0] ?? ''));
+        if ($first === '' || preg_match('/^\d+$/', $first) !== 1) {
+            return null;
+        }
+
+        return $first;
+    }
+
+    /**
      * @param  array<string,mixed>  $data
      * @return list<array<string,mixed>>
      */
@@ -238,6 +348,7 @@ class Jet2LiveImporter implements ProviderHttpImporter
                 $distanceKm = (float) $property['distanceToAirportKm'];
             }
             $transferMins = $this->coachTransferMinutesFromDistanceKm($distanceKm);
+            $images = $this->extractImageMetadataFromApiResultItem($item, $property);
 
             $row = [
                 'provider_option_id' => 'jet2-'.substr(sha1($itemUrl.'|'.$name), 0, 12),
@@ -280,6 +391,7 @@ class Jet2LiveImporter implements ProviderHttpImporter
                     'provider' => $provider->key,
                     'source' => 'jet2_smartsearch_api',
                     'property' => $property,
+                    'images' => $images,
                     'accommodation_options' => $item['accommodationOptions'] ?? null,
                     'distance_to_airport_km' => is_numeric($item['distanceToAirportKm'] ?? null)
                         ? (float) $item['distanceToAirportKm']
@@ -288,6 +400,9 @@ class Jet2LiveImporter implements ProviderHttpImporter
                     'inbound_flight' => is_string($inboundFlight) ? $inboundFlight : (is_string($item['inboundFlight'] ?? null) ? $item['inboundFlight'] : null),
                 ],
             ];
+            if ($images !== []) {
+                $row['images'] = $images;
+            }
             $rows[] = $row;
         }
 
@@ -392,6 +507,89 @@ class Jet2LiveImporter implements ProviderHttpImporter
         }
 
         return null;
+    }
+
+    /**
+     * Best-effort extraction of hotel image URLs from smartsearch API result nodes.
+     *
+     * @param  array<string,mixed>  $item
+     * @param  array<string,mixed>  $property
+     * @return list<array{url: string, source: string, position: int}>
+     */
+    private function extractImageMetadataFromApiResultItem(array $item, array $property): array
+    {
+        $candidates = [
+            $item['images'] ?? null,
+            $item['image'] ?? null,
+            $item['imageUrl'] ?? null,
+            $item['imageURL'] ?? null,
+            $item['heroImage'] ?? null,
+            $item['heroImageUrl'] ?? null,
+            $property['images'] ?? null,
+            $property['image'] ?? null,
+            $property['imageUrl'] ?? null,
+            $property['imageURL'] ?? null,
+            $property['heroImage'] ?? null,
+            $property['heroImageUrl'] ?? null,
+        ];
+
+        $urls = [];
+        foreach ($candidates as $node) {
+            $this->appendImageUrlsFromNode($urls, $node);
+        }
+
+        $out = [];
+        foreach (array_values(array_unique($urls)) as $pos => $imageUrl) {
+            $out[] = [
+                'url' => $imageUrl,
+                'source' => 'jet2_smartsearch_api',
+                'position' => $pos,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<string>  $out
+     */
+    private function appendImageUrlsFromNode(array &$out, mixed $node): void
+    {
+        if (is_string($node)) {
+            $trimmed = trim($node);
+            if ($trimmed !== '' && filter_var($trimmed, FILTER_VALIDATE_URL)) {
+                $out[] = $trimmed;
+            }
+
+            return;
+        }
+        if (! is_array($node)) {
+            return;
+        }
+        if (array_is_list($node)) {
+            foreach ($node as $entry) {
+                $this->appendImageUrlsFromNode($out, $entry);
+            }
+
+            return;
+        }
+
+        foreach (['url', 'imageUrl', 'imageURL', 'src', 'sourceUrl', 'cdnUrl', 'contentUrl', 'contentURL'] as $key) {
+            if (! isset($node[$key]) || ! is_string($node[$key])) {
+                continue;
+            }
+            $trimmed = trim($node[$key]);
+            if ($trimmed !== '' && filter_var($trimmed, FILTER_VALIDATE_URL)) {
+                $out[] = $trimmed;
+                break;
+            }
+        }
+
+        foreach ($node as $value) {
+            if (is_array($value)) {
+                $this->appendImageUrlsFromNode($out, $value);
+            }
+        }
     }
 
     /**

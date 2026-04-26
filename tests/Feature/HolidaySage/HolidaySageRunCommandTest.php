@@ -16,6 +16,7 @@ use GuzzleHttp\Psr7\Request as Psr7Request;
 use GuzzleHttp\Psr7\Response as Psr7Response;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
+use Tests\Support\Jet2UrlContract;
 use Tests\TestCase;
 
 class HolidaySageRunCommandTest extends TestCase
@@ -85,7 +86,9 @@ class HolidaySageRunCommandTest extends TestCase
         $this->seed(ProviderSourceSeeder::class);
         Config::set('holidaysage.import_use_stub', false);
         $this->fakeJet2Http(new MockHandler([
-            new Psr7Response(200, [], json_encode(['results' => []])),
+            new Psr7Response(200, [], json_encode(['results' => [], 'totalResults' => 0])),
+            // The importer can fall back to the search/results HTML if the API returns 200 with 0 results.
+            new Psr7Response(200, [], '<html><head><title>Jet2</title></head><body></body></html>'),
         ]));
 
         $this->artisan('holidaysage:run', [
@@ -95,7 +98,7 @@ class HolidaySageRunCommandTest extends TestCase
 
         $run = SavedHolidaySearchRun::query()->latest('id')->first();
         $this->assertSame(SavedHolidaySearchRunStatus::Failed, $run->status);
-        $this->assertStringContainsString('did not contain holiday candidates', (string) $run->error_message);
+        $this->assertStringContainsString('returned zero candidates', (string) $run->error_message);
     }
 
     public function test_live_http_retries_then_fails_after_exhausting_attempts(): void
@@ -172,7 +175,7 @@ class HolidaySageRunCommandTest extends TestCase
 
     private function searchResultsUrl(): string
     {
-        return 'https://www.jet2holidays.com/search/results?airport=98&date=25-07-2026&duration=10&occupancy=r2c_r2c1_4&destination=39&sortorder=1&page=1&boardbasis=5_2_3';
+        return Jet2UrlContract::forCommandAndPrefill();
     }
 
     private function fakeJet2Http(MockHandler $handler): void

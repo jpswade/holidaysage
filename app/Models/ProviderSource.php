@@ -39,4 +39,9 @@ class ProviderSource extends Model
     {
         return $this->hasMany(HolidayPackage::class);
     }
+
+    public function providerDestinations(): HasMany
+    {
+        return $this->hasMany(ProviderDestination::class);
+    }
 }

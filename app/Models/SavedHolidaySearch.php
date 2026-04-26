@@ -32,6 +32,9 @@ class SavedHolidaySearch extends Model
         'max_transfer_minutes',
         'board_preferences',
         'destination_preferences',
+        'provider_destination_ids',
+        'provider_occupancy',
+        'provider_url_params',
         'feature_preferences',
         'excluded_destinations',
         'excluded_features',
@@ -53,6 +56,9 @@ class SavedHolidaySearch extends Model
             'travel_end_date' => 'date',
             'board_preferences' => 'array',
             'destination_preferences' => 'array',
+            'provider_destination_ids' => 'array',
+            'provider_occupancy' => 'array',
+            'provider_url_params' => 'array',
             'feature_preferences' => 'array',
             'excluded_destinations' => 'array',
             'excluded_features' => 'array',
@@ -89,5 +95,58 @@ class SavedHolidaySearch extends Model
     public function importMappings(): HasMany
     {
         return $this->hasMany(HolidaySearchImportMapping::class);
+    }
+
+    /**
+     * Structured provider area ids: `['jet2' => ['39', '40'], 'tui' => [...]]`.
+     *
+     * @return list<string>
+     */
+    public function providerDestinationIdListFor(string $providerKey): array
+    {
+        $m = $this->provider_destination_ids;
+        if (! is_array($m) || ! isset($m[$providerKey]) || ! is_array($m[$providerKey])) {
+            return [];
+        }
+        $out = [];
+        foreach ($m[$providerKey] as $id) {
+            if (is_string($id) && $id !== '') {
+                $out[] = $id;
+            }
+        }
+
+        return $out;
+    }
+
+    public function providerOccupancyWireFor(string $providerKey): ?string
+    {
+        $m = $this->provider_occupancy;
+        if (! is_array($m) || ! isset($m[$providerKey])) {
+            return null;
+        }
+        $v = $m[$providerKey];
+        if (! is_string($v) || $v === '') {
+            return null;
+        }
+
+        return $v;
+    }
+
+    public function providerUrlParamFor(string $providerKey, string $name): ?string
+    {
+        $m = $this->provider_url_params;
+        if (! is_array($m) || ! isset($m[$providerKey]) || ! is_array($m[$providerKey])) {
+            return null;
+        }
+        $inner = $m[$providerKey];
+        if (! array_key_exists($name, $inner)) {
+            return null;
+        }
+        $v = $inner[$name];
+        if (! is_string($v) || $v === '') {
+            return null;
+        }
+
+        return $v;
     }
 }

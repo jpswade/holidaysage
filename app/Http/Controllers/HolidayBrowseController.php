@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Support\BrowseDemoCatalogue;
+use App\Services\BrowseHolidaysQuery;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -83,9 +83,8 @@ class HolidayBrowseController extends Controller
         ];
     }
 
-    public function index(Request $request): View
+    public function index(Request $request, BrowseHolidaysQuery $browseHolidays): View
     {
-        $all = BrowseDemoCatalogue::items();
         $provider = strtolower((string) $request->query('provider', 'all'));
         if (! in_array($provider, ['all', 'jet2', 'tui'], true)) {
             $provider = 'all';
@@ -96,12 +95,22 @@ class HolidayBrowseController extends Controller
         }
         $q = (string) $request->query('q', '');
 
-        $holidays = BrowseDemoCatalogue::filter($all, $provider, $board, $q);
+        $holidaysTotal = $browseHolidays->totalUnfilteredCount();
+        $cards = $browseHolidays->filteredCards($request);
+        $holidays = [];
+        foreach ($cards as $i => $item) {
+            $holidays[] = [
+                'viewModel' => $item['viewModel'],
+                'search' => $item['row']->search,
+                'displayRank' => $i + 1,
+            ];
+        }
+        $holidaysShown = count($holidays);
 
         return view('holidays.index', [
             'holidays' => $holidays,
-            'holidaysTotal' => count($all),
-            'holidaysShown' => count($holidays),
+            'holidaysTotal' => $holidaysTotal,
+            'holidaysShown' => $holidaysShown,
             'filterProvider' => $provider,
             'filterBoard' => $board,
             'filterQuery' => $q,

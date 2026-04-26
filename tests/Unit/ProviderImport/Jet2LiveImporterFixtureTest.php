@@ -7,6 +7,7 @@ use App\Models\ProviderSource;
 use App\Models\SavedHolidaySearch;
 use App\Services\ProviderImport\Importers\Jet2LiveImporter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\Jet2UrlContract;
 use Tests\TestCase;
 
 class Jet2LiveImporterFixtureTest extends TestCase
@@ -26,13 +27,13 @@ class Jet2LiveImporterFixtureTest extends TestCase
         $search = SavedHolidaySearch::query()->create([
             'name' => 'Fixture Search',
             'slug' => 'fixture-search',
-            'provider_import_url' => 'https://www.jet2holidays.com/search/results?airport=98_63_3&date=25-07-2026&duration=10&occupancy=r2c_r2c1_4&destination=39&sortorder=1&page=1&boardbasis=5_2_3',
+            'provider_import_url' => Jet2UrlContract::forImporterWithMultiDepartureAirportIds(),
             'departure_airport_code' => 'BHX',
             'travel_start_date' => '2026-07-25',
             'duration_min_nights' => 10,
             'duration_max_nights' => 10,
-            'adults' => 2,
-            'children' => 1,
+            'adults' => 4,
+            'children' => 2,
             'infants' => 0,
             'status' => 'active',
         ]);
@@ -59,9 +60,6 @@ class Jet2LiveImporterFixtureTest extends TestCase
         $this->assertNull($first['transfer_minutes']);
         $this->assertSame('jet2_smartsearch_api', $first['raw_attributes']['source'] ?? null);
         $this->assertTrue(str_starts_with((string) $first['provider_url'], '/beach/'));
-        foreach ($candidates as $i => $candidate) {
-            $this->assertArrayNotHasKey('images', $candidate, "candidate #{$i}: `images` must come from detail HTML only until a real smartsearch JSON fixture (with field paths) drives a separate test.");
-        }
     }
 
     public function test_it_falls_back_to_available_flight_when_selected_flight_id_missing(): void
@@ -75,13 +73,13 @@ class Jet2LiveImporterFixtureTest extends TestCase
         $search = SavedHolidaySearch::query()->create([
             'name' => 'Fallback Flight Search',
             'slug' => 'fallback-flight-search',
-            'provider_import_url' => 'https://www.jet2holidays.com/search/results?airport=98&date=25-07-2026&duration=10&occupancy=r2c1_4&destination=39',
+            'provider_import_url' => Jet2UrlContract::forSingleRoomWithTwoChildAges(),
             'departure_airport_code' => 'MAN',
             'travel_start_date' => '2026-07-25',
             'duration_min_nights' => 10,
             'duration_max_nights' => 10,
             'adults' => 2,
-            'children' => 1,
+            'children' => 2,
             'infants' => 0,
             'status' => 'active',
         ]);
@@ -146,13 +144,13 @@ class Jet2LiveImporterFixtureTest extends TestCase
         $search = SavedHolidaySearch::query()->create([
             'name' => 'Selected Price Flight Search',
             'slug' => 'selected-price-flight-search',
-            'provider_import_url' => 'https://www.jet2holidays.com/search/results?airport=98&date=25-07-2026&duration=10&occupancy=r2c1_4&destination=39',
+            'provider_import_url' => Jet2UrlContract::forSingleRoomWithTwoChildAges(),
             'departure_airport_code' => 'MAN',
             'travel_start_date' => '2026-07-25',
             'duration_min_nights' => 10,
             'duration_max_nights' => 10,
             'adults' => 2,
-            'children' => 1,
+            'children' => 2,
             'infants' => 0,
             'status' => 'active',
         ]);
@@ -212,21 +210,68 @@ class Jet2LiveImporterFixtureTest extends TestCase
         $this->assertSame(125, $candidates[0]['flight_inbound_duration_minutes']);
     }
 
+    public function test_it_extracts_images_from_smartsearch_api_payload_when_available(): void
+    {
+        $provider = ProviderSource::query()->create([
+            'key' => 'jet2',
+            'name' => 'Jet2 Holidays',
+            'base_url' => 'https://www.jet2holidays.com',
+            'status' => ProviderSourceStatus::Active,
+        ]);
+        $search = SavedHolidaySearch::query()->create([
+            'name' => 'Image Payload Search',
+            'slug' => 'image-payload-search',
+            'provider_import_url' => Jet2UrlContract::forSingleRoomWithTwoChildAges(),
+            'departure_airport_code' => 'MAN',
+            'travel_start_date' => '2026-07-25',
+            'duration_min_nights' => 7,
+            'duration_max_nights' => 7,
+            'adults' => 2,
+            'children' => 0,
+            'infants' => 0,
+            'status' => 'active',
+        ]);
+
+        $payload = [
+            'results' => [
+                [
+                    'name' => 'Image Hotel',
+                    'bookingUrl' => '/beach/spain/test/image-hotel',
+                    'selectedPrice' => ['totalPrice' => 1234, 'pricePerPerson' => 617],
+                    'images' => [
+                        ['url' => 'https://media.jet2.com/is/image/jet2/image-1'],
+                        ['imageUrl' => 'https://media.jet2.com/is/image/jet2/image-2'],
+                    ],
+                    'property' => [
+                        'id' => 'image-hotel-id',
+                        'heroImageUrl' => 'https://media.jet2.com/is/image/jet2/image-1',
+                    ],
+                ],
+            ],
+            'flights' => [],
+        ];
+
+        $importer = $this->app->make(Jet2LiveImporter::class);
+        $method = new \ReflectionMethod($importer, 'candidatesFromApiJson');
+        $method->setAccessible(true);
+        $candidates = $method->invoke($importer, $payload, $search, $provider, $search->provider_import_url);
+
+        $this->assertCount(1, $candidates);
+        $images = $candidates[0]['images'] ?? null;
+        $this->assertIsArray($images);
+        $this->assertSame('https://media.jet2.com/is/image/jet2/image-1', $images[0]['url'] ?? null);
+        $this->assertSame('https://media.jet2.com/is/image/jet2/image-2', $images[1]['url'] ?? null);
+        $this->assertSame('jet2_smartsearch_api', $images[0]['source'] ?? null);
+        $this->assertSame($images, $candidates[0]['raw_attributes']['images'] ?? null);
+    }
+
     private function readJet2ApiFixture(): string
     {
-        $paths = [
-            base_path('tests/Fixtures/jet2_search_api_airport98_page1.json'),
-            '/Users/wade/Sites/beachin/tests/fixtures/jet2_search_api_airport98_page1.json',
-        ];
-        foreach ($paths as $path) {
-            if (is_file($path)) {
-                $content = file_get_contents($path);
-                if (is_string($content) && trim($content) !== '') {
-                    return $content;
-                }
-            }
-        }
+        $path = Jet2UrlContract::apiResponsePath();
+        $content = file_get_contents($path);
+        $this->assertIsString($content);
+        $this->assertNotSame('', trim($content), 'API fixture is empty: '.$path);
 
-        $this->fail('Jet2 API fixture not found in known fixture paths.');
+        return $content;
     }
 }

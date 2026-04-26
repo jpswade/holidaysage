@@ -4,6 +4,7 @@ namespace App\Actions\HolidaySearch;
 
 use App\Enums\SavedHolidaySearchStatus;
 use App\Models\HolidaySearchImportMapping;
+use App\Models\ProviderDestination;
 use App\Models\ProviderSource;
 use App\Models\SavedHolidaySearch;
 use App\Services\Imports\ImportUrlParserRegistry;
@@ -34,6 +35,15 @@ class CreateSavedHolidaySearchFromUrlAction
         $search->forceFill($attributes);
         $search->user_id = $userId;
         $search->save();
+
+        if (is_array($extracted['provider_destination_ids'] ?? null)
+            && isset($extracted['provider_destination_ids'][$provider->key])
+            && is_array($extracted['provider_destination_ids'][$provider->key])) {
+            ProviderDestination::registerProviderIdsWithoutNames(
+                $provider,
+                $extracted['provider_destination_ids'][$provider->key]
+            );
+        }
 
         HolidaySearchImportMapping::query()->updateOrCreate([
             'saved_holiday_search_id' => $search->id,
@@ -76,7 +86,7 @@ class CreateSavedHolidaySearchFromUrlAction
         ]);
         $name = SavedHolidaySearchDisplayName::fromExtracted($extractedForName, $provider);
 
-        return array_filter([
+        $merged = array_filter([
             'name' => $name,
             'slug' => $isUpdate ? null : $this->uniqueSlug($baseSlug),
             'provider_import_url' => $url,
@@ -97,6 +107,23 @@ class CreateSavedHolidaySearchFromUrlAction
             'excluded_features' => $extracted['excluded_features'] ?? null,
             'status' => SavedHolidaySearchStatus::Active,
         ], fn ($v) => $v !== null);
+        if (array_key_exists('provider_destination_ids', $extracted)) {
+            $merged['provider_destination_ids'] = is_array($extracted['provider_destination_ids'])
+                ? $extracted['provider_destination_ids']
+                : null;
+        }
+        if (array_key_exists('provider_occupancy', $extracted)) {
+            $merged['provider_occupancy'] = is_array($extracted['provider_occupancy'])
+                ? $extracted['provider_occupancy']
+                : null;
+        }
+        if (array_key_exists('provider_url_params', $extracted)) {
+            $merged['provider_url_params'] = is_array($extracted['provider_url_params'])
+                ? $extracted['provider_url_params']
+                : null;
+        }
+
+        return $merged;
     }
 
     private function uniqueSlug(string $base): string

@@ -14,6 +14,7 @@ use App\Models\ScoredHolidayOption;
 use App\Services\Imports\ImportUrlParserRegistry;
 use App\Services\Providers\ProviderSourceResolver;
 use App\Support\SavedHolidaySearchDisplayName;
+use App\Support\SearchFormPrefill;
 use App\ViewModels\ResultCardViewModel;
 use App\ViewModels\SearchSummaryViewModel;
 use App\ViewModels\TopPickViewModel;
@@ -50,14 +51,15 @@ class SearchController extends Controller
     public function create(Request $request): View
     {
         return view('searches.create', [
-            'prefill' => $this->sanitisedSearchPrefill($request),
+            'prefill' => SearchFormPrefill::fromRequest($request),
         ]);
     }
 
-    public function edit(SavedHolidaySearch $search): View
+    public function edit(Request $request, SavedHolidaySearch $search): View
     {
         return view('searches.edit', [
             'search' => $search,
+            'prefill' => SearchFormPrefill::fromRequest($request),
         ]);
     }
 
@@ -86,6 +88,9 @@ class SearchController extends Controller
             'max_transfer_minutes' => $validated['max_transfer_minutes'] ?? null,
             'board_preferences' => $validated['board_preferences'] ?? $search->board_preferences,
             'destination_preferences' => $validated['destination_preferences'] ?? $search->destination_preferences,
+            'provider_destination_ids' => $validated['provider_destination_ids'] ?? $search->provider_destination_ids,
+            'provider_occupancy' => $validated['provider_occupancy'] ?? $search->provider_occupancy,
+            'provider_url_params' => $validated['provider_url_params'] ?? $search->provider_url_params,
             'feature_preferences' => $validated['feature_preferences'] ?? [],
             'status' => $validated['status'] ?? $search->status->value,
         ]);
@@ -119,6 +124,9 @@ class SearchController extends Controller
             'max_transfer_minutes' => $validated['max_transfer_minutes'] ?? null,
             'board_preferences' => $validated['board_preferences'] ?? null,
             'destination_preferences' => $validated['destination_preferences'] ?? null,
+            'provider_destination_ids' => $validated['provider_destination_ids'] ?? null,
+            'provider_occupancy' => $validated['provider_occupancy'] ?? null,
+            'provider_url_params' => $validated['provider_url_params'] ?? null,
             'feature_preferences' => $validated['feature_preferences'] ?? null,
             'status' => $validated['status'] ?? SavedHolidaySearchStatus::Active->value,
         ]);
@@ -329,149 +337,5 @@ class SearchController extends Controller
         }
 
         return rtrim($baseUrl, '/').'/'.ltrim($providerUrl, '/');
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function sanitisedSearchPrefill(Request $request): array
-    {
-        $allowedFeatures = [
-            'family_friendly',
-            'near_beach',
-            'walkable',
-            'swimming_pool',
-            'kids_club',
-            'adults_only',
-            'all_inclusive',
-            'quiet_relaxing',
-            'near_nightlife',
-            'spa_wellness',
-        ];
-
-        $out = [];
-
-        $code = $request->query('departure_airport_code');
-        if (is_string($code) && $code !== '') {
-            $normalised = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $code), 0, 8));
-            if ($normalised !== '') {
-                $out['departure_airport_code'] = $normalised;
-            }
-        }
-
-        foreach (['travel_start_date', 'travel_end_date'] as $key) {
-            $v = $request->query($key);
-            if (is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) === 1) {
-                $out[$key] = $v;
-            }
-        }
-
-        $flex = $request->query('travel_date_flexibility_days');
-        if (is_numeric($flex)) {
-            $n = (int) $flex;
-            if ($n >= 0 && $n <= 14) {
-                $out['travel_date_flexibility_days'] = $n;
-            }
-        }
-
-        foreach (['duration_min_nights', 'duration_max_nights'] as $key) {
-            $v = $request->query($key);
-            if (! is_numeric($v)) {
-                continue;
-            }
-            $n = (int) $v;
-            if ($n >= 1 && $n <= 30) {
-                $out[$key] = $n;
-            }
-        }
-
-        if (isset($out['duration_min_nights'], $out['duration_max_nights']) && $out['duration_max_nights'] < $out['duration_min_nights']) {
-            unset($out['duration_min_nights'], $out['duration_max_nights']);
-        }
-
-        foreach (['adults', 'children', 'infants'] as $key) {
-            $v = $request->query($key);
-            if (! is_numeric($v)) {
-                continue;
-            }
-            $n = (int) $v;
-            $min = $key === 'adults' ? 1 : 0;
-            if ($n >= $min && $n <= 10) {
-                $out[$key] = $n;
-            }
-        }
-
-        $budget = $request->query('budget_total');
-        if (is_numeric($budget)) {
-            $b = (float) $budget;
-            if ($b >= 0 && $b <= 1_000_000_000) {
-                $out['budget_total'] = $b;
-            }
-        }
-
-        foreach (['max_flight_minutes', 'max_transfer_minutes'] as $key) {
-            $v = $request->query($key);
-            if (! is_numeric($v)) {
-                continue;
-            }
-            $n = (int) $v;
-            if ($key === 'max_flight_minutes' && $n >= 30 && $n <= 1440) {
-                $out[$key] = $n;
-            }
-            if ($key === 'max_transfer_minutes' && $n >= 0 && $n <= 600) {
-                $out[$key] = $n;
-            }
-        }
-
-        $features = $request->query('feature_preferences');
-        if (is_string($features)) {
-            $features = [$features];
-        } elseif (! is_array($features)) {
-            $features = [];
-        }
-        $filteredFeatures = [];
-        foreach ($features as $f) {
-            if (! is_string($f)) {
-                continue;
-            }
-            if (in_array($f, $allowedFeatures, true)) {
-                $filteredFeatures[] = $f;
-            }
-        }
-        $filteredFeatures = array_values(array_unique($filteredFeatures));
-        if ($filteredFeatures !== []) {
-            $out['feature_preferences'] = $filteredFeatures;
-        }
-
-        $destinations = $request->query('destination_preferences');
-        if (is_string($destinations)) {
-            $destinations = [$destinations];
-        } elseif (! is_array($destinations)) {
-            $destinations = [];
-        }
-        $destOut = [];
-        foreach (array_slice($destinations, 0, 10) as $d) {
-            if (! is_string($d)) {
-                continue;
-            }
-            $t = trim(substr($d, 0, 80));
-            if ($t !== '') {
-                $destOut[] = $t;
-            }
-        }
-        $destOut = array_values(array_unique($destOut));
-        if ($destOut !== []) {
-            $out['destination_preferences'] = $destOut;
-        }
-
-        $importUrl = $request->query('provider_import_url');
-        if (is_string($importUrl) && $importUrl !== '') {
-            $len = strlen($importUrl);
-            if ($len <= 2048 && filter_var($importUrl, FILTER_VALIDATE_URL)) {
-                $out['provider_import_url'] = $importUrl;
-            }
-        }
-
-        return $out;
     }
 }

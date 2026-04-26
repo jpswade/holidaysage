@@ -24,6 +24,7 @@
             @method('PATCH')
             @include('searches.partials.search-form-fields', [
                 'search' => $search,
+                'prefill' => $prefill ?? [],
                 'submitLabel' => 'Save changes',
                 'showFooterBadges' => false,
             ])

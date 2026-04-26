@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "description": "Real Jet2 `destination` query values. A Beachin fixture is not available in this workspace; samples are a user-captured /search/results param and a href taken from `tests/Fixtures/jet2_detail_prinsotel_alba.html` (mega menu, line ~975, All Inclusive holidays by month).",
+    "prinsotel_detail_html_fixture": "jet2_detail_prinsotel_alba.html",
+    "prinsotel_detail_href_gal": "All Inclusive holidays by month"
+  },
+  "user_submitted_search_results": {
+    "source": "user_pasted_query_string",
+    "destination_param": "39_1679_1452_1497_122_125_145_2241_1773_1815_2280_2325_151_150_149_2112_160_159_1584_156_1719_161_2053_157_2169_916_139_129_2191_8_95_103_2071_94_1364_99_2028_2235_98_97_2304_1747_105_2051_2052_1857_1858_2305_104_1929_1928_2034_2229_2233_2260_11_7_1359_43_2119_2118_26_4"
+  },
+  "prinsotel_mega_menu_holiday_calendar": {
+    "source": "jet2_detail_prinsotel_alba.html_first_holiday_calendar_destination",
+    "destination_param": "155_153_154_152_2291_49_50_121_2391_116_120_1564_1679_127_1452_1497_1525_122_125_126_145_2241_2315_70_82_2323_84_1465_1773_1815_2280_2325_1961_2369_151_150_1325_149_2112_160_1328_159_957_1584_156_1327_1371_1719_161_2053_157_1548_960_2169_2300_2365_137_2158_917_165_139_129_2130_2191_2278_69_892_95_103_2071_94_1364_99_2028_2235_98_97_1774_2304_1747_105_2051_2052_1857_1858_2305_104_1929_1928_93_2034_2229_2233_2260_2377_72_1278_918_1243_1335_1360_1898_169_1281_1424_1748_1965_88_109_1380_2119_2118_110_2220_131_71_2221_1746_135_2239"
+  }
+}

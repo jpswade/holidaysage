@@ -1,0 +1,9 @@
+{
+  "description": "Jet2 /search/results URL(s) captured alongside tests/Fixtures/jet2_search_api_airport98_page1.json so import and API fixtures stay aligned.",
+  "api_response_file": "jet2_search_api_airport98_page1.json",
+  "search_results": {
+    "for_command_and_prefill": "https://www.jet2holidays.com/search/results?airport=98&date=25-07-2026&duration=10&occupancy=r2c_r2c1_4&destination=39&sortorder=1&page=1&boardbasis=5_2_3",
+    "for_importer_with_multi_departure_airport_ids": "https://www.jet2holidays.com/search/results?airport=98_63_3&date=25-07-2026&duration=10&occupancy=r2c_r2c1_4&destination=39&sortorder=1&page=1&boardbasis=5_2_3",
+    "for_single_room_two_child_ages": "https://www.jet2holidays.com/search/results?airport=98&date=25-07-2026&duration=10&occupancy=r2c1_4&destination=39"
+  }
+}

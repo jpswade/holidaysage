@@ -24,6 +24,7 @@ return [
         'max_5xx_attempts' => (int) env('HOLIDAYSAGE_JET2_5XX_ATTEMPTS', 2),
         'retry_5xx_sleep_ms' => (int) env('HOLIDAYSAGE_JET2_5XX_SLEEP_MS', 300),
         'import_job_timeout' => (int) env('HOLIDAYSAGE_JET2_IMPORT_JOB_TIMEOUT', 90),
+        'strict_fixture_shape' => (bool) env('HOLIDAYSAGE_JET2_STRICT_FIXTURE_SHAPE', false),
     ],
 
 ];

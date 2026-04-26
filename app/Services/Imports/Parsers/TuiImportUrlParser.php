@@ -124,7 +124,7 @@ class TuiImportUrlParser implements ImportUrlParser
         if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m)) {
             return $m[1].'-'.$m[2].'-'.$m[3];
         }
-        if (preg_match('/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/', $value, $m)) {
+        if (preg_match('/^(\d{1,2})[-.\/](\d{1,2})[-.\/](\d{4})$/', $value, $m)) {
             try {
                 return Carbon::createFromDate((int) $m[3], (int) $m[2], (int) $m[1])->toDateString();
             } catch (\Throwable) {

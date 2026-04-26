@@ -39,6 +39,14 @@ class StoreSavedHolidaySearchRequest extends FormRequest
             'feature_preferences.*' => ['string', 'max:64'],
             'destination_preferences' => ['nullable', 'array'],
             'destination_preferences.*' => ['string', 'max:80'],
+            'provider_destination_ids' => ['nullable', 'array', 'max:8'],
+            'provider_destination_ids.*' => ['array', 'max:200'],
+            'provider_destination_ids.*.*' => ['string', 'regex:/^\d+$/', 'max:20'],
+            'provider_occupancy' => ['nullable', 'array', 'max:8'],
+            'provider_occupancy.*' => ['string', 'max:1024'],
+            'provider_url_params' => ['nullable', 'array', 'max:8'],
+            'provider_url_params.*' => ['array', 'max:32'],
+            'provider_url_params.*.*' => ['string', 'max:2048'],
             'status' => ['nullable', Rule::in(array_map(
                 static fn (SavedHolidaySearchStatus $status): string => $status->value,
                 SavedHolidaySearchStatus::cases()
