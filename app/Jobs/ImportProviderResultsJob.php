@@ -12,7 +12,6 @@ use App\Services\ProviderImport\ProviderSearchBuilderResolver;
 use App\Services\ProviderImport\StubSnapshotData;
 use App\Services\Providers\ProviderSourceResolver;
 use App\Support\SyncQueueLine;
-use App\Support\SyncRunProgress;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -100,10 +99,8 @@ class ImportProviderResultsJob implements ShouldQueue
                 'candidates' => $estimate,
             ]);
 
-            SyncRunProgress::next('Run #'.$this->runId.': import complete — reading snapshot…');
             ParseProviderSnapshotJob::dispatch($snapshot->id);
         } catch (Throwable $e) {
-            SyncRunProgress::onFailure($e);
             $this->markFailed($run, $e);
             throw $e;
         }

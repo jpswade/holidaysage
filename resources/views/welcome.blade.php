@@ -13,11 +13,14 @@
             Stop comparing holidays manually. Define your preferences once, and HolidaySage continuously finds and ranks the best options from Jet2 and TUI.
         </p>
         <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <a href="{{ route('searches.create') }}" class="rounded-xl bg-teal-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700">
-                Create Your Search
+            <a href="{{ route('holidays.index') }}" class="rounded-xl bg-teal-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700">
+                Browse holidays
+            </a>
+            <a href="{{ route('searches.create') }}" class="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50">
+                Create a search
             </a>
             <a href="{{ route('searches.index') }}" class="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50">
-                View Saved Searches
+                My saved searches
             </a>
         </div>
     </section>
@@ -114,8 +117,8 @@
     <section class="relative left-1/2 w-screen -translate-x-1/2 border-t border-slate-200 bg-white py-16 text-center">
         <h2 class="text-5xl font-bold tracking-tight text-slate-900">Ready to find your perfect holiday?</h2>
         <p class="mt-4 text-2xl text-slate-600">Create your first search in under 2 minutes.</p>
-        <a href="{{ route('searches.create') }}" class="mt-8 inline-flex items-center gap-2 rounded-xl bg-teal-600 px-8 py-4 text-xl font-semibold text-white transition hover:bg-teal-700">
-            Get Started
+        <a href="{{ route('holidays.index') }}" class="mt-8 inline-flex items-center gap-2 rounded-xl bg-teal-600 px-8 py-4 text-xl font-semibold text-white transition hover:bg-teal-700">
+            Browse holidays
             <x-lucide-arrow-right class="h-5 w-5" />
         </a>
     </section>

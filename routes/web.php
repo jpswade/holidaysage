@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\HolidayBrowseController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
@@ -8,11 +9,15 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
+Route::get('/holidays', [HolidayBrowseController::class, 'index'])->name('holidays.index');
+
 Route::prefix('searches')->name('searches.')->group(function (): void {
     Route::get('/', [SearchController::class, 'index'])->name('index');
     Route::get('/create', [SearchController::class, 'create'])->name('create');
     Route::post('/', [SearchController::class, 'store'])->name('store');
     Route::post('/import', [SearchController::class, 'import'])->name('import');
+    Route::get('/{search}/edit', [SearchController::class, 'edit'])->name('edit');
+    Route::patch('/{search}', [SearchController::class, 'update'])->name('update');
     Route::get('/{search}', [SearchController::class, 'show'])->name('show');
     Route::get('/{search}/deals/{scoredOption}', [SearchController::class, 'deal'])->name('deals.show');
     Route::post('/{search}/refresh', [SearchController::class, 'refresh'])->name('refresh');

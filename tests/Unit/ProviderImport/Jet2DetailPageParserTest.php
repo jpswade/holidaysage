@@ -43,6 +43,9 @@ class Jet2DetailPageParserTest extends TestCase
         $this->assertSame(42.1, $packages[0]['three_course_meal_for_two_price']);
         $this->assertSame('07:25-11:25', $packages[0]['outbound_flight_time_text']);
         $this->assertSame('12:20-14:25', $packages[0]['inbound_flight_time_text']);
+        $this->assertSame(240, $packages[0]['flight_outbound_duration_minutes']);
+        $this->assertSame(125, $packages[0]['flight_inbound_duration_minutes']);
+        $this->assertSame(60, $packages[0]['transfer_minutes']);
 
         $this->assertIsArray($hotel['images'] ?? null);
         $this->assertCount(19, $hotel['images']);
@@ -86,6 +89,9 @@ class Jet2DetailPageParserTest extends TestCase
         $this->assertSame(48.0, $packages[0]['three_course_meal_for_two_price']);
         $this->assertSame('08:05-12:10', $packages[0]['outbound_flight_time_text']);
         $this->assertSame('13:20-15:35', $packages[0]['inbound_flight_time_text']);
+        $this->assertSame(245, $packages[0]['flight_outbound_duration_minutes']);
+        $this->assertSame(135, $packages[0]['flight_inbound_duration_minutes']);
+        $this->assertSame(120, $packages[0]['transfer_minutes']);
 
         $this->assertIsArray($hotel['images'] ?? null);
         $this->assertCount(46, $hotel['images']);
@@ -94,6 +100,75 @@ class Jet2DetailPageParserTest extends TestCase
             $hotel['images'][0]['url']
         );
         $this->assertSame('jet2_json_ld', $hotel['images'][0]['source']);
+    }
+
+    public function test_it_extracts_hotel_images_from_json_ld_at_graph_and_array_type(): void
+    {
+        $ld = [
+            '@context' => 'https://schema.org',
+            '@graph' => [
+                ['@type' => 'WebPage', 'name' => 'Ignore'],
+                [
+                    '@type' => ['Hotel', 'LodgingBusiness'],
+                    'name' => 'Graph Hotel',
+                    'image' => 'https://media.jet2.com/is/image/jet2/GRAPH_TEST_01',
+                ],
+            ],
+        ];
+        $html = '<html><head><script type="application/ld+json">'
+            .json_encode($ld, JSON_THROW_ON_ERROR)
+            .'</script></head><body></body></html>';
+
+        $parser = app(Jet2DetailPageParser::class);
+        $parsed = $parser->parse($this->candidate(), $html);
+        $hotel = $parsed['hotel'];
+
+        $this->assertIsArray($hotel['images'] ?? null);
+        $this->assertSame('https://media.jet2.com/is/image/jet2/GRAPH_TEST_01', $hotel['images'][0]['url']);
+        $this->assertSame('jet2_json_ld', $hotel['images'][0]['source']);
+    }
+
+    public function test_it_fills_images_from_jet2_cdn_url_scrape_when_no_json_ld_or_gallery(): void
+    {
+        $html = '<html><body><script>window.x="https://media.jet2.com/is/image/jet2/SCRAPE_ONLY_99"</script></body></html>';
+        $parser = app(Jet2DetailPageParser::class);
+        $parsed = $parser->parse($this->candidate(), $html);
+        $this->assertStringContainsString('SCRAPE_ONLY_99', $parsed['hotel']['images'][0]['url'] ?? '');
+        $this->assertSame('jet2_cdn', $parsed['hotel']['images'][0]['source'] ?? null);
+    }
+
+    public function test_it_parses_json_ld_from_single_quoted_script_type(): void
+    {
+        $ld = [
+            '@type' => 'Hotel',
+            'name' => 'Script Quote Hotel',
+            'image' => 'https://media.jet2.com/is/image/jet2/SQSCRIPT_01',
+        ];
+        $html = "<html><head><script type='application/ld+json'>"
+            .json_encode($ld, JSON_THROW_ON_ERROR)
+            .'</script></head><body></body></html>';
+
+        $parser = app(Jet2DetailPageParser::class);
+        $parsed = $parser->parse($this->candidate(), $html);
+        $this->assertArrayHasKey('images', $parsed['hotel']);
+        $this->assertStringContainsString('SQSCRIPT_01', $parsed['hotel']['images'][0]['url']);
+    }
+
+    public function test_it_extracts_gallery_url_from_data_ofi_src_when_data_lazy_absent(): void
+    {
+        $html = <<<'HTML'
+<html><body>
+<div class="image-galleryV2">
+  <img class="image-galleryV2__fullimage" data-ofi-src="https://media.jet2.com/is/image/jet2/OFSRC_ONLY_01" alt="" />
+</div>
+</body></html>
+HTML;
+
+        $parser = app(Jet2DetailPageParser::class);
+        $parsed = $parser->parse($this->candidate(), $html);
+        $urls = array_column($parsed['hotel']['images'] ?? [], 'url');
+
+        $this->assertContains('https://media.jet2.com/is/image/jet2/OFSRC_ONLY_01', $urls);
     }
 
     public function test_it_uses_provider_fallback_distance_when_airport_is_missing(): void

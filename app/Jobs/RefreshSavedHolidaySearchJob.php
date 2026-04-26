@@ -7,7 +7,6 @@ use App\Enums\SavedHolidaySearchRunType;
 use App\Models\SavedHolidaySearch;
 use App\Models\SavedHolidaySearchRun;
 use App\Support\SyncQueueLine;
-use App\Support\SyncRunProgress;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -51,7 +50,6 @@ class RefreshSavedHolidaySearchJob implements ShouldQueue
         ]);
 
         SyncQueueLine::line('Run #'.$run->id.' created: queuing import job…');
-        SyncRunProgress::next('Run #'.$run->id.' — importing from provider…');
         ImportProviderResultsJob::dispatch($run->id, $search->id);
     }
 }

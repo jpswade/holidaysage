@@ -7,7 +7,6 @@ use App\Enums\SavedHolidaySearchRunType;
 use App\Jobs\RefreshSavedHolidaySearchJob;
 use App\Models\SavedHolidaySearch;
 use App\Models\SavedHolidaySearchRun;
-use App\Support\SyncRunProgress;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Config;
 
@@ -72,7 +71,6 @@ class HolidaySageRunCommand extends Command
             if ($this->option('sync')) {
                 $this->printSyncModeHints();
                 $this->line('Sync mode: running pipeline import -> parse -> normalise -> score...');
-                SyncRunProgress::begin($this->output->getOutput());
             } else {
                 $this->line('Refresh queued. Ensure `php artisan horizon` or `php artisan queue:work` is running.');
             }
@@ -89,7 +87,6 @@ class HolidaySageRunCommand extends Command
             return self::SUCCESS;
         } catch (\Throwable $e) {
             if ($this->option('sync')) {
-                SyncRunProgress::onFailure($e);
                 $this->printRunSummary($search->id);
             }
             $this->error($e->getMessage());
@@ -118,7 +115,6 @@ class HolidaySageRunCommand extends Command
             if ($this->option('sync')) {
                 $this->printSyncModeHints();
                 $this->line('Sync mode: running pipeline stages import -> parse -> normalise -> score...');
-                SyncRunProgress::begin($this->output->getOutput());
             } else {
                 $this->line('Import pipeline queued. Ensure `php artisan horizon` or `php artisan queue:work` is running.');
             }
@@ -135,7 +131,6 @@ class HolidaySageRunCommand extends Command
             return self::SUCCESS;
         } catch (\Throwable $e) {
             if ($this->option('sync') && $searchId !== null) {
-                SyncRunProgress::onFailure($e);
                 $this->printRunSummary($searchId);
             }
             $this->error($e->getMessage());
@@ -154,7 +149,7 @@ class HolidaySageRunCommand extends Command
         $api = (float) ($jet2['api_timeout'] ?? 12.0);
         $connect = (float) ($jet2['connect_timeout'] ?? 5.0);
         $attempts = (int) ($jet2['max_5xx_attempts'] ?? 2);
-        $this->line('Sync: work runs in this process. A pipeline progress bar (and a sub bar during detail fetches) shows stage updates.');
+        $this->line('Sync: work runs in this process. Lines prefixed with [holidaysage] are stage updates from jobs.');
         $this->line(sprintf(
             'Sync: each live Jet2 API GET is limited to about %.0fs connect + %.0fs read (and up to %d attempt(s) on 5xx); see config/holidaysage.php.',
             $connect,

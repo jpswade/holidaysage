@@ -152,6 +152,10 @@ class Jet2LiveImporter implements ProviderHttpImporter
     }
 
     /**
+     * Map smartsearch `results[]` to import candidates. Per-hotel `images` are produced by the detail HTML
+     * parser, not this method, until a real API JSON fixture documents image fields and a test is added
+     * (see `tests/Unit/ProviderImport/Jet2LiveImporterFixtureTest.php`).
+     *
      * @param  array<string,mixed>  $data
      * @return list<array<string,mixed>>
      */
@@ -225,8 +229,17 @@ class Jet2LiveImporter implements ProviderHttpImporter
             $airportTo = is_array($flightInfo) ? ($flightInfo['arrival_airport_code'] ?? null) : null;
             $outboundFlight = is_array($flightInfo) ? ($flightInfo['outbound_flight'] ?? null) : null;
             $inboundFlight = is_array($flightInfo) ? ($flightInfo['inbound_flight'] ?? null) : null;
+            $outboundFlightMins = is_array($flightInfo) ? ($flightInfo['outbound_duration_minutes'] ?? null) : null;
+            $inboundFlightMins = is_array($flightInfo) ? ($flightInfo['inbound_duration_minutes'] ?? null) : null;
+            $distanceKm = null;
+            if (is_numeric($item['distanceToAirportKm'] ?? null)) {
+                $distanceKm = (float) $item['distanceToAirportKm'];
+            } elseif (is_numeric($property['distanceToAirportKm'] ?? null)) {
+                $distanceKm = (float) $property['distanceToAirportKm'];
+            }
+            $transferMins = $this->coachTransferMinutesFromDistanceKm($distanceKm);
 
-            $rows[] = [
+            $row = [
                 'provider_option_id' => 'jet2-'.substr(sha1($itemUrl.'|'.$name), 0, 12),
                 'provider_hotel_id' => (string) ($item['hotelId'] ?? $property['id'] ?? ''),
                 'provider_url' => $itemUrl,
@@ -249,9 +262,9 @@ class Jet2LiveImporter implements ProviderHttpImporter
                 'price_total' => is_numeric($price) ? (float) $price : 0.0,
                 'price_per_person' => is_numeric($pricePerPerson) ? (float) $pricePerPerson : null,
                 'currency' => 'GBP',
-                'flight_outbound_duration_minutes' => null,
-                'flight_inbound_duration_minutes' => null,
-                'transfer_minutes' => null,
+                'flight_outbound_duration_minutes' => is_int($outboundFlightMins) ? $outboundFlightMins : null,
+                'flight_inbound_duration_minutes' => is_int($inboundFlightMins) ? $inboundFlightMins : null,
+                'transfer_minutes' => $transferMins,
                 'distance_to_beach_meters' => null,
                 'distance_to_centre_meters' => null,
                 'star_rating' => isset($item['starRating']) && is_numeric($item['starRating']) ? (int) $item['starRating'] : (isset($property['rating']) && is_numeric($property['rating']) ? (int) $property['rating'] : null),
@@ -275,6 +288,7 @@ class Jet2LiveImporter implements ProviderHttpImporter
                     'inbound_flight' => is_string($inboundFlight) ? $inboundFlight : (is_string($item['inboundFlight'] ?? null) ? $item['inboundFlight'] : null),
                 ],
             ];
+            $rows[] = $row;
         }
 
         return $rows;
@@ -282,7 +296,7 @@ class Jet2LiveImporter implements ProviderHttpImporter
 
     /**
      * @param  array<string,mixed>  $data
-     * @return array<int, array{arrival_airport_code: string, outbound_flight: string, inbound_flight: string}>
+     * @return array<int, array{arrival_airport_code: string, outbound_flight: string, inbound_flight: string, outbound_duration_minutes: ?int, inbound_duration_minutes: ?int}>
      */
     private function indexFlightsById(array $data): array
     {
@@ -294,20 +308,51 @@ class Jet2LiveImporter implements ProviderHttpImporter
             $flightId = (int) $flight['flightId'];
             $outbound = is_array($flight['outbound'] ?? null) ? $flight['outbound'] : [];
             $inbound = is_array($flight['inbound'] ?? null) ? $flight['inbound'] : [];
+            $obDep = (string) ($outbound['departureDateTimeLocal'] ?? '');
+            $obArr = (string) ($outbound['arrivalDateTimeLocal'] ?? '');
+            $ibDep = (string) ($inbound['departureDateTimeLocal'] ?? '');
+            $ibArr = (string) ($inbound['arrivalDateTimeLocal'] ?? '');
             $out[$flightId] = [
                 'arrival_airport_code' => strtoupper((string) ($outbound['arrivalAirportCode'] ?? '')),
-                'outbound_flight' => $this->formatFlightWindow(
-                    (string) ($outbound['departureDateTimeLocal'] ?? ''),
-                    (string) ($outbound['arrivalDateTimeLocal'] ?? '')
-                ) ?? '',
-                'inbound_flight' => $this->formatFlightWindow(
-                    (string) ($inbound['departureDateTimeLocal'] ?? ''),
-                    (string) ($inbound['arrivalDateTimeLocal'] ?? '')
-                ) ?? '',
+                'outbound_flight' => $this->formatFlightWindow($obDep, $obArr) ?? '',
+                'inbound_flight' => $this->formatFlightWindow($ibDep, $ibArr) ?? '',
+                'outbound_duration_minutes' => $this->minutesBetweenLocalIsoStrings($obDep, $obArr),
+                'inbound_duration_minutes' => $this->minutesBetweenLocalIsoStrings($ibDep, $ibArr),
             ];
         }
 
         return $out;
+    }
+
+    private function minutesBetweenLocalIsoStrings(string $departureIso, string $arrivalIso): ?int
+    {
+        try {
+            if ($departureIso === '' || $arrivalIso === '') {
+                return null;
+            }
+            $start = Carbon::parse($departureIso);
+            $end = Carbon::parse($arrivalIso);
+            $minutes = (int) round(abs($start->diffInRealMinutes($end)));
+            if ($minutes <= 0 || $minutes > 48 * 60) {
+                return null;
+            }
+
+            return $minutes;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Coach-style transfer estimate from resort–airport distance (same scale as CSV export heuristics).
+     */
+    private function coachTransferMinutesFromDistanceKm(?float $km): ?int
+    {
+        if ($km === null || $km <= 0.0) {
+            return null;
+        }
+
+        return max(1, (int) round(($km / 50.0) * 60.0));
     }
 
     private function formatFlightWindow(string $departureIso, string $arrivalIso): ?string

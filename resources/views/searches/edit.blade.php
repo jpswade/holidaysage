@@ -1,24 +1,32 @@
-@php($prefill = $prefill ?? [])
-
-<x-layouts.app-shell title="Create Search - HolidaySage">
+<x-layouts.app-shell :title="'Refine search: ' . $search->name . ' - HolidaySage'">
     <section class="mx-auto max-w-4xl">
-        <h1 class="text-3xl font-bold tracking-tight text-slate-900">Tell us about your perfect holiday</h1>
-        <p class="mt-3 text-slate-600">Define your preferences once, and we will continuously find and rank the best options from Jet2 and TUI.</p>
+        <a href="{{ route('searches.show', $search) }}" class="inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-700">
+            <x-lucide-arrow-left class="h-4 w-4" />
+            Back to results
+        </a>
+
+        <h1 class="mt-4 text-3xl font-bold tracking-tight text-slate-900">Refine your search</h1>
+        <p class="mt-3 text-slate-600">Update dates, party, budget, and preferences. Refresh the search when you want new live results from providers.</p>
 
         <div class="mt-8 rounded-2xl border border-teal-200 bg-teal-50/70 p-5">
             <p class="text-sm font-semibold text-teal-900">Import from Jet2 or TUI</p>
-            <p class="mt-1 text-sm text-teal-800">Paste a provider search URL to auto-fill your preferences.</p>
+            <p class="mt-1 text-sm text-teal-800">Paste a provider URL to overwrite matching fields on this form.</p>
             <form id="import-form" class="mt-4 flex flex-col gap-3 sm:flex-row">
                 @csrf
-                <input id="import-url" type="url" name="url" value="{{ e($prefill['provider_import_url'] ?? '') }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500" placeholder="https://www.jet2holidays.com/..." />
+                <input id="import-url" type="url" name="url" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500" placeholder="https://www.jet2holidays.com/..." />
                 <button type="submit" class="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700">Import</button>
             </form>
             <p id="import-message" class="mt-2 text-sm text-slate-700"></p>
         </div>
 
-        <form method="POST" action="{{ route('searches.store') }}" class="mt-8 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <form method="POST" action="{{ route('searches.update', $search) }}" class="mt-8 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             @csrf
-            @include('searches.partials.search-form-fields', ['prefill' => $prefill])
+            @method('PATCH')
+            @include('searches.partials.search-form-fields', [
+                'search' => $search,
+                'submitLabel' => 'Save changes',
+                'showFooterBadges' => false,
+            ])
         </form>
     </section>
 

@@ -8,7 +8,7 @@
         <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h1 class="text-3xl font-bold tracking-tight text-slate-900">{{ $search->name }}</h1>
             <div class="mt-4">
-                @include('searches.partials.search-summary-bar', ['summary' => $summary])
+                @include('searches.partials.search-summary-bar', ['summary' => $summary, 'detailed' => true])
             </div>
         </div>
     </section>

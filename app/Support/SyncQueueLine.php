@@ -15,9 +15,6 @@ final class SyncQueueLine
         if (config('queue.default') !== 'sync') {
             return;
         }
-        if (SyncRunProgress::isActive()) {
-            return;
-        }
         fwrite(\STDOUT, '  [holidaysage] '.$message.PHP_EOL);
     }
 }

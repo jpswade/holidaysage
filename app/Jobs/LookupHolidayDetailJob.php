@@ -7,10 +7,8 @@ use App\Models\ProviderSource;
 use App\Models\SavedHolidaySearchRun;
 use App\Services\Hotels\HotelImageService;
 use App\Services\Normalisation\HolidayOptionNormaliser;
+use App\Services\ProviderImport\Jet2SmartSearchHttpClient;
 use App\Services\ProviderImport\ProviderDetailPageParserResolver;
-use App\Support\SyncRunProgress;
-use GuzzleHttp\Handler\StreamHandler;
-use GuzzleHttp\HandlerStack;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -20,8 +18,6 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Symfony\Component\Process\Process;
-use Throwable;
 
 class LookupHolidayDetailJob implements ShouldQueue
 {
@@ -40,6 +36,7 @@ class LookupHolidayDetailJob implements ShouldQueue
         HolidayOptionNormaliser $normaliser,
         ProviderDetailPageParserResolver $parserResolver,
         HotelImageService $hotelImageService,
+        Jet2SmartSearchHttpClient $jet2Http,
     ): void {
         if ($this->batch() !== null && $this->batch()->cancelled()) {
             return;
@@ -49,7 +46,7 @@ class LookupHolidayDetailJob implements ShouldQueue
         $candidate = $this->candidate;
         $detailUrl = (string) ($candidate['provider_url'] ?? '');
         if ($detailUrl !== '') {
-            $detail = $this->fetchAndParse($provider, $detailUrl, $candidate, $parserResolver);
+            $detail = $this->fetchAndParse($provider, $detailUrl, $candidate, $parserResolver, $jet2Http);
             $candidate = array_merge($candidate, $detail['hotel'] ?? []);
             $detailPackages = $detail['packages'] ?? [];
         } else {
@@ -95,8 +92,6 @@ class LookupHolidayDetailJob implements ShouldQueue
             'packages_upserted' => count($createdIds),
             'provider_url' => $detailUrl,
         ]);
-
-        SyncRunProgress::subTick();
     }
 
     /**
@@ -108,65 +103,43 @@ class LookupHolidayDetailJob implements ShouldQueue
         string $detailUrl,
         array $candidate,
         ProviderDetailPageParserResolver $parserResolver,
+        Jet2SmartSearchHttpClient $jet2Http,
     ): array {
-        try {
-            $absoluteUrl = str_starts_with($detailUrl, 'http') ? $detailUrl : rtrim($provider->base_url, '/').'/'.ltrim($detailUrl, '/');
-            $html = $this->fetchHtmlViaPythonRequests($absoluteUrl);
-            if ($html !== null && $html !== '') {
-                return $parserResolver->for($provider)->parse($candidate, $html);
-            }
-
-            $handler = HandlerStack::create(new StreamHandler);
-            $response = Http::retry([], throw: false)
-                ->withHeaders([
-                    'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-                    'Accept-Language' => 'en-GB,en-US;q=0.9,en;q=0.8,pt;q=0.7',
-                    'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                ])
-                ->connectTimeout(5)
-                ->timeout(8)
-                ->withOptions(['handler' => $handler])
-                ->get($absoluteUrl);
-            if (! $response->successful()) {
-                return $parserResolver->for($provider)->parse($candidate, '');
-            }
-
-            return $parserResolver->for($provider)->parse($candidate, (string) $response->body());
-        } catch (Throwable) {
-            return $parserResolver->for($provider)->parse($candidate, '');
+        $absoluteUrl = str_starts_with($detailUrl, 'http') ? $detailUrl : rtrim($provider->base_url, '/').'/'.ltrim($detailUrl, '/');
+        $html = $this->fetchHotelDetailHtml($provider, $absoluteUrl, $jet2Http);
+        if ($html !== null && $html !== '') {
+            return $parserResolver->for($provider)->parse($candidate, $html);
         }
+
+        return $parserResolver->for($provider)->parse($candidate, '');
     }
 
-    private function fetchHtmlViaPythonRequests(string $url): ?string
+    private function fetchHotelDetailHtml(ProviderSource $provider, string $absoluteUrl, Jet2SmartSearchHttpClient $jet2Http): ?string
     {
-        $script = <<<'PY'
-import base64
-import requests
-import sys
+        if ($provider->key === 'jet2') {
+            $response = $jet2Http->get($absoluteUrl, isApi: false);
+            if (! $response->successful()) {
+                return null;
+            }
+            $body = (string) $response->body();
 
-url = sys.argv[1]
-headers = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8,pt;q=0.7",
-}
-r = requests.get(url, headers=headers, timeout=12)
-if r.status_code >= 200 and r.status_code < 300:
-    print(base64.b64encode(r.content).decode("ascii"))
-PY;
+            return $body !== '' ? $body : null;
+        }
 
-        $process = new Process(['python3', '-c', $script, $url]);
-        $process->setTimeout(16);
-        $process->run();
-        if (! $process->isSuccessful()) {
+        $response = Http::retry([], throw: false)
+            ->withHeaders([
+                'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+                'Accept-Language' => 'en-GB,en-US;q=0.9,en;q=0.8,pt;q=0.7',
+                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            ])
+            ->connectTimeout(5)
+            ->timeout(20)
+            ->get($absoluteUrl);
+        if (! $response->successful()) {
             return null;
         }
-        $encoded = trim($process->getOutput());
-        if ($encoded === '') {
-            return null;
-        }
-        $decoded = base64_decode($encoded, true);
+        $body = (string) $response->body();
 
-        return $decoded === false ? null : $decoded;
+        return $body !== '' ? $body : null;
     }
 }

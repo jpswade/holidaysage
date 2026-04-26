@@ -4,6 +4,7 @@ namespace App\Services\Hotels;
 
 use App\Models\Hotel;
 use App\Models\HotelPhoto;
+use App\Support\PlausibleHttpImageUrl;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -21,6 +22,13 @@ class HotelImageService
     {
         $rows = $this->imageRowsFromMetadata($hotel);
         if ($rows === []) {
+            if (is_array($hotel->images) && $hotel->images !== []) {
+                Log::info('holidaysage.hotel_image.metadata_skipped_no_valid_urls', [
+                    'hotel_id' => $hotel->id,
+                    'candidates' => count($hotel->images),
+                ]);
+            }
+
             // No image metadata: leave existing `hotel_photos` in place (empty parse should not wipe cache).
             return;
         }
@@ -75,10 +83,12 @@ class HotelImageService
                 break;
             }
             $url = null;
-            if (is_string($item) && filter_var($item, FILTER_VALIDATE_URL)) {
+            if (is_string($item) && PlausibleHttpImageUrl::is($item)) {
                 $url = $item;
-            } elseif (is_array($item) && isset($item['url']) && is_string($item['url']) && filter_var($item['url'], FILTER_VALIDATE_URL)) {
+            } elseif (is_array($item) && isset($item['url']) && is_string($item['url']) && PlausibleHttpImageUrl::is($item['url'])) {
                 $url = $item['url'];
+            } elseif (is_array($item) && isset($item['contentUrl']) && is_string($item['contentUrl']) && PlausibleHttpImageUrl::is($item['contentUrl'])) {
+                $url = $item['contentUrl'];
             }
             if ($url === null) {
                 continue;

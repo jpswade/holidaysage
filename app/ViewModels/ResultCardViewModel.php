@@ -3,6 +3,7 @@
 namespace App\ViewModels;
 
 use App\Models\ScoredHolidayOption;
+use App\Support\BoardBasisDisplay;
 
 class ResultCardViewModel
 {
@@ -77,7 +78,7 @@ class ResultCardViewModel
             nights: $package ? (int) $package->nights.' nights' : 'Nights unavailable',
             flightOutbound: $package?->flight_outbound_duration_minutes ? self::minutesToText((int) $package->flight_outbound_duration_minutes) : null,
             transfer: $package?->transfer_minutes ? (int) $package->transfer_minutes.' min transfer' : null,
-            boardType: $package?->board_type ? ucwords(str_replace('_', ' ', (string) $package->board_type)) : null,
+            boardType: BoardBasisDisplay::humanLabel($package?->board_type, $package?->board_recommended),
             providerUrl: $package?->provider_url,
             recommendationSummary: $row->recommendation_summary,
             reasons: array_values(array_filter(array_map('strval', $row->recommendation_reasons ?? []))),

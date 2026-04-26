@@ -5,6 +5,8 @@ namespace App\Services\ProviderImport\DetailParsers;
 use App\Contracts\ProviderDetailPageParser;
 use App\Services\Airports\AirportLookupService;
 use App\Services\ProviderImport\Importers\Concerns\ExtractsEmbeddedJson;
+use App\Support\PlausibleHttpImageUrl;
+use Carbon\Carbon;
 use Illuminate\Support\Str;
 
 class Jet2DetailPageParser implements ProviderDetailPageParser
@@ -41,6 +43,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         $hotel = [];
         $packages = [];
         $overviewItems = $this->extractOverviewListItems($html);
+        $transferMinutesFromOverview = $this->transferMinutesFromOverviewItems($overviewItems);
         $property = is_array($candidate['raw_attributes']['property'] ?? null)
             ? $candidate['raw_attributes']['property']
             : [];
@@ -235,7 +238,7 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
                 }
                 $packages[] = [
                     'board_type' => $boardId,
-                    'board_recommended' => $boardLabel,
+                    'board_recommended' => $boardLabel ?? (self::BOARD_LABELS[$boardId] ?? null),
                     'price_total' => (float) $totalPrice,
                     'price_per_person' => is_numeric($priceOption['pricePerPerson'] ?? null) ? (float) $priceOption['pricePerPerson'] : null,
                 ];
@@ -243,10 +246,9 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         }
 
         $jsonLdImageUrls = [];
-        $docs = $this->extractJsonDocuments($html);
+        $docs = $this->expandJsonLdGraphDocuments($this->extractJsonDocuments($html));
         foreach ($docs as $doc) {
-            $type = strtolower((string) ($doc['@type'] ?? ''));
-            if ($type !== 'hotel') {
+            if (! is_array($doc) || ! $this->isJsonLdHotelDoc($doc)) {
                 continue;
             }
 
@@ -276,6 +278,9 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
 
         $galleryImageUrls = $this->extractJet2GalleryDataLazyUrls($html);
         $imageMetadata = $this->buildHotelImageMetadataList($jsonLdImageUrls, $galleryImageUrls);
+        if ($imageMetadata === null) {
+            $imageMetadata = $this->imageMetadataFromJet2CdnScrape($html);
+        }
         if ($imageMetadata !== null) {
             $hotel['images'] = $imageMetadata;
         }
@@ -459,6 +464,17 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         );
         $recommendedBoard = $this->extractRecommendedBoard($html, $accommodationOptions);
 
+        $rawAttrs = is_array($candidate['raw_attributes'] ?? null) ? $candidate['raw_attributes'] : [];
+        $candidateDistanceKm = is_numeric($rawAttrs['distance_to_airport_km'] ?? null)
+            ? (float) $rawAttrs['distance_to_airport_km']
+            : null;
+        $hotelDistanceKm = isset($hotel['distance_to_airport_km']) && is_numeric($hotel['distance_to_airport_km'])
+            ? (float) $hotel['distance_to_airport_km']
+            : null;
+        $transferMinutesResolved = $transferMinutesFromOverview
+            ?? $this->estimateCoachTransferMinutesFromKm($hotelDistanceKm)
+            ?? $this->estimateCoachTransferMinutesFromKm($candidateDistanceKm);
+
         if ($packages === []) {
             $packages[] = [];
         }
@@ -488,6 +504,28 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
                     $text
                 );
             }
+
+            $rawObFlight = is_string($rawAttrs['outbound_flight'] ?? null) ? $rawAttrs['outbound_flight'] : null;
+            $rawIbFlight = is_string($rawAttrs['inbound_flight'] ?? null) ? $rawAttrs['inbound_flight'] : null;
+            if (! isset($package['flight_outbound_duration_minutes']) || $package['flight_outbound_duration_minutes'] === null) {
+                $obMins = is_numeric($candidate['flight_outbound_duration_minutes'] ?? null)
+                    ? (int) $candidate['flight_outbound_duration_minutes']
+                    : null;
+                $package['flight_outbound_duration_minutes'] = $obMins
+                    ?? $this->flightSegmentMinutesFromFlightWindow($package['outbound_flight_time_text'] ?? null)
+                    ?? $this->flightSegmentMinutesFromFlightWindow($rawObFlight);
+            }
+            if (! isset($package['flight_inbound_duration_minutes']) || $package['flight_inbound_duration_minutes'] === null) {
+                $ibMins = is_numeric($candidate['flight_inbound_duration_minutes'] ?? null)
+                    ? (int) $candidate['flight_inbound_duration_minutes']
+                    : null;
+                $package['flight_inbound_duration_minutes'] = $ibMins
+                    ?? $this->flightSegmentMinutesFromFlightWindow($package['inbound_flight_time_text'] ?? null)
+                    ?? $this->flightSegmentMinutesFromFlightWindow($rawIbFlight);
+            }
+            if ((! isset($package['transfer_minutes']) || $package['transfer_minutes'] === null) && $transferMinutesResolved !== null) {
+                $package['transfer_minutes'] = $transferMinutesResolved;
+            }
         }
         unset($package);
 
@@ -496,6 +534,101 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
             'hotel' => $hotel,
             'packages' => $packages,
         ];
+    }
+
+    /**
+     * @param  list<string>  $overviewItems
+     */
+    private function transferMinutesFromOverviewItems(array $overviewItems): ?int
+    {
+        foreach ($overviewItems as $raw) {
+            $line = Str::lower(trim((string) $raw));
+            if ($line === '') {
+                continue;
+            }
+            if (! str_contains($line, 'transfer time') && ! str_contains($line, 'transfer to resort')) {
+                continue;
+            }
+            $mins = $this->parseTransferDurationMinutesFromText($line);
+            if ($mins !== null) {
+                return $mins;
+            }
+        }
+
+        return null;
+    }
+
+    private function parseTransferDurationMinutesFromText(string $t): ?int
+    {
+        if (preg_match('/(\d+)\s*(?:hour|hr)s?\s+(\d+)\s*(?:minute|min)s?/i', $t, $m)) {
+            return (int) $m[1] * 60 + (int) $m[2];
+        }
+        if (preg_match('/(\d+)\s*(?:hour|hr)s?\b/i', $t, $m)) {
+            return (int) $m[1] * 60;
+        }
+        if (preg_match('/(\d+)\s*(?:minute|min)s?\b/i', $t, $m)) {
+            return (int) $m[1];
+        }
+
+        return null;
+    }
+
+    private function estimateCoachTransferMinutesFromKm(?float $km): ?int
+    {
+        if ($km === null || $km <= 0.0) {
+            return null;
+        }
+
+        return max(1, (int) round(($km / 50.0) * 60.0));
+    }
+
+    private function flightSegmentMinutesFromFlightWindow(?string $window): ?int
+    {
+        if (! is_string($window) || trim($window) === '') {
+            return null;
+        }
+        $w = trim($window);
+        if (str_contains($w, '–') || str_contains($w, '-')) {
+            $parts = preg_split('/\s*[–-]\s*/u', $w, 2);
+            if (is_array($parts) && count($parts) === 2) {
+                $left = trim($parts[0]);
+                $right = trim($parts[1]);
+                try {
+                    if (preg_match('/\d{4}/', $left) && preg_match('/\d{4}/', $right)) {
+                        $a = Carbon::parse($left);
+                        $b = Carbon::parse($right);
+                        $minutes = (int) round(abs($a->diffInRealMinutes($b)));
+                        if ($minutes > 0 && $minutes <= 48 * 60) {
+                            return $minutes;
+                        }
+                    }
+                } catch (\Throwable) {
+                }
+            }
+        }
+        $m = [];
+        if (preg_match('/(\d{2}):(\d{2})\s*[–-]\s*(?:[A-Za-z]{3}\s+\d{2}\s+[A-Za-z]{3}\s+\d{4}\s+)?(\d{2}):(\d{2})$/u', $w, $m)) {
+            $start = ((int) $m[1] * 60) + (int) $m[2];
+            $end = ((int) $m[3] * 60) + (int) $m[4];
+            if ($end < $start) {
+                $end += 24 * 60;
+            }
+            $minutes = $end - $start;
+
+            return $minutes > 0 && $minutes <= 48 * 60 ? $minutes : null;
+        }
+        if (preg_match('/^(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})$/u', $w, $m)) {
+            $start = ((int) $m[1] * 60) + (int) $m[2];
+            $end = ((int) $m[3] * 60) + (int) $m[4];
+            if ($end < $start) {
+                $end += 24 * 60;
+            }
+            $minutes = $end - $start;
+
+            return $minutes > 0 && $minutes <= 48 * 60 ? $minutes : null;
+        }
+
+        return null;
     }
 
     private function extractCurrencyValue(string $text, string $label): ?float
@@ -1061,26 +1194,53 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         if (! isset($doc['image'])) {
             return [];
         }
-        $raw = $doc['image'];
-        if (is_string($raw) && filter_var($raw, FILTER_VALIDATE_URL)) {
-            return [$raw];
+
+        return $this->stringUrlsFromJsonLdImageNode($doc['image']);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function stringUrlsFromJsonLdImageNode(mixed $raw): array
+    {
+        if (is_string($raw)) {
+            return PlausibleHttpImageUrl::is($raw) ? [$raw] : [];
         }
         if (! is_array($raw)) {
             return [];
         }
-        if (isset($raw['url']) && is_string($raw['url']) && filter_var($raw['url'], FILTER_VALIDATE_URL)) {
-            return [$raw['url']];
+        if (array_is_list($raw)) {
+            $out = [];
+            foreach ($raw as $item) {
+                $out = [...$out, ...$this->stringUrlsFromJsonLdImageNode($item)];
+            }
+
+            return $out;
         }
-        $out = [];
-        foreach ($raw as $item) {
-            if (is_string($item) && filter_var($item, FILTER_VALIDATE_URL)) {
-                $out[] = $item;
-            } elseif (is_array($item) && isset($item['url']) && is_string($item['url']) && filter_var($item['url'], FILTER_VALIDATE_URL)) {
-                $out[] = $item['url'];
+        $direct = $this->firstResolvableImageUrlString($raw);
+        if ($direct !== null) {
+            return [$direct];
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $node
+     */
+    private function firstResolvableImageUrlString(array $node): ?string
+    {
+        foreach (['url', 'contentUrl', 'contentURL', 'thumbnailUrl', 'thumbnail', 'embedUrl', 'image'] as $key) {
+            if (! isset($node[$key])) {
+                continue;
+            }
+            $v = $node[$key];
+            if (is_string($v) && PlausibleHttpImageUrl::is($v)) {
+                return $v;
             }
         }
 
-        return $out;
+        return null;
     }
 
     /**
@@ -1095,11 +1255,8 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         $seen = [];
         foreach ($tags as $tagMatch) {
             $tag = $tagMatch[0];
-            if (! preg_match('/\bdata-lazy="([^"]+)"/i', $tag, $m)) {
-                continue;
-            }
-            $u = $m[1];
-            if (! is_string($u) || ! filter_var($u, FILTER_VALIDATE_URL) || isset($seen[$u])) {
+            $u = $this->jet2GalleryImageUrlFromImgTag($tag);
+            if ($u === null || isset($seen[$u])) {
                 continue;
             }
             $seen[$u] = true;
@@ -1107,6 +1264,68 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
         }
 
         return $urls;
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $docs
+     * @return list<array<string,mixed>>
+     */
+    private function expandJsonLdGraphDocuments(array $docs): array
+    {
+        $out = [];
+        foreach ($docs as $doc) {
+            if (! is_array($doc)) {
+                continue;
+            }
+            if (isset($doc['@graph']) && is_array($doc['@graph'])) {
+                foreach ($doc['@graph'] as $node) {
+                    if (is_array($node)) {
+                        $out[] = $node;
+                    }
+                }
+
+                continue;
+            }
+            $out[] = $doc;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string,mixed>  $doc
+     */
+    private function isJsonLdHotelDoc(array $doc): bool
+    {
+        $kinds = ['hotel', 'lodgingbusiness', 'resort', 'motel', 'hostel', 'bedandbreakfast'];
+        $type = $doc['@type'] ?? null;
+        if (is_string($type)) {
+            return in_array(strtolower(trim($type)), $kinds, true);
+        }
+        if (is_array($type)) {
+            foreach ($type as $t) {
+                if (is_string($t) && in_array(strtolower(trim($t)), $kinds, true)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function jet2GalleryImageUrlFromImgTag(string $tag): ?string
+    {
+        foreach (['data-lazy', 'data-ofi-src', 'data-src', 'src'] as $attr) {
+            if (! preg_match('/\b'.preg_quote($attr, '/').'="([^"]+)"/i', $tag, $m)) {
+                continue;
+            }
+            $u = html_entity_decode(trim((string) $m[1]), ENT_QUOTES | ENT_HTML5);
+            if ($u !== '' && PlausibleHttpImageUrl::is($u)) {
+                return $u;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -1132,6 +1351,38 @@ class Jet2DetailPageParser implements ProviderDetailPageParser
             }
             $seen[$u] = true;
             $out[] = ['url' => $u, 'source' => 'jet2_gallery', 'position' => $pos++];
+        }
+
+        return $out === [] ? null : $out;
+    }
+
+    /**
+     * When JSON-LD / gallery class hooks miss (e.g. client-only shell, different markup), the
+     * page often still embeds media.jet2.com scene7 URLs; scrape them as a last resort.
+     *
+     * @return list<array{url: string, source: string, position: int}>|null
+     */
+    private function imageMetadataFromJet2CdnScrape(string $html): ?array
+    {
+        if (! str_contains($html, 'media.jet2.com')) {
+            return null;
+        }
+        if (! preg_match_all('#https://media\.jet2\.com/is/image/[^\s"\'<>&]+#i', $html, $m)) {
+            return null;
+        }
+        $seen = [];
+        $out = [];
+        $pos = 0;
+        foreach ($m[0] as $u) {
+            $u = rtrim($u, '.,;)]}');
+            if (isset($seen[$u]) || $pos >= 40) {
+                continue;
+            }
+            if (! PlausibleHttpImageUrl::is($u)) {
+                continue;
+            }
+            $seen[$u] = true;
+            $out[] = ['url' => $u, 'source' => 'jet2_cdn', 'position' => $pos++];
         }
 
         return $out === [] ? null : $out;

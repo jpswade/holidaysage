@@ -5,7 +5,6 @@ namespace App\Services\ProviderImport;
 use App\Support\SyncQueueLine;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException as GuzzleConnectException;
-use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -50,9 +49,10 @@ class Jet2SmartSearchHttpClient
             try {
                 $psr = $this->client->get($url, $config);
             } catch (GuzzleConnectException $e) {
-                Log::warning('holidaysage.jet2.get.guzzle_connect_failed', [
+                Log::debug('holidaysage.jet2.get.guzzle_connect_failed', [
                     'attempt' => $attempt,
                     'message' => $e->getMessage(),
+                    'url' => Str::limit($url, 200, '…'),
                 ]);
                 $fallback = $this->requestViaPhpCurl($url, $isApi, $t);
                 if ($fallback !== null) {
@@ -61,7 +61,13 @@ class Jet2SmartSearchHttpClient
                     return $fallback;
                 }
 
-                throw new ConnectionException($e->getMessage(), 0, $e);
+                throw new \RuntimeException(
+                    'Jet2 HTTP request failed (Guzzle connection/timeout and ext-curl fallback exhausted): '
+                    .Str::limit($e->getMessage(), 500)
+                    .' | URL: '.Str::limit($url, 200, '…'),
+                    0,
+                    $e
+                );
             }
             $ms = (int) round((hrtime(true) - $started) / 1_000_000);
             $code = $psr->getStatusCode();

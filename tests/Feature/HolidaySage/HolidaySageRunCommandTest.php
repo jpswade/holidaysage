@@ -26,6 +26,7 @@ class HolidaySageRunCommandTest extends TestCase
     {
         $this->seed(ProviderSourceSeeder::class);
         Config::set('holidaysage.import_use_stub', true);
+        $this->fakeJet2HttpForStubPipeline();
 
         $this->artisan('holidaysage:run', [
             'url' => $this->searchResultsUrl(),
@@ -132,6 +133,7 @@ class HolidaySageRunCommandTest extends TestCase
     {
         $this->seed(ProviderSourceSeeder::class);
         Config::set('holidaysage.import_use_stub', true);
+        $this->fakeJet2HttpForStubPipeline();
 
         $this->artisan('holidaysage:run', [
             'url' => $this->searchResultsUrl(),
@@ -140,6 +142,8 @@ class HolidaySageRunCommandTest extends TestCase
 
         $search = SavedHolidaySearch::query()->firstOrFail();
         $runsAfterFirst = SavedHolidaySearchRun::query()->count();
+
+        $this->fakeJet2HttpForStubPipeline();
 
         $this->artisan('holidaysage:run', [
             '--search' => (string) $search->id,
@@ -179,5 +183,18 @@ class HolidaySageRunCommandTest extends TestCase
                 new Client(['handler' => HandlerStack::create($handler)])
             )
         );
+    }
+
+    /**
+     * Stub imports still dispatch detail fetches to Jet2 hotel URLs; without a mock, timeouts
+     * would fail the batch now that errors propagate instead of being swallowed.
+     */
+    private function fakeJet2HttpForStubPipeline(): void
+    {
+        $minimalHotelHtml = '<html><head><title>Stub</title></head><body></body></html>';
+        $this->fakeJet2Http(new MockHandler(array_map(
+            static fn () => new Psr7Response(200, [], $minimalHotelHtml),
+            range(1, 12)
+        )));
     }
 }

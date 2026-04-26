@@ -54,8 +54,14 @@ class Jet2LiveImporterFixtureTest extends TestCase
         $this->assertSame('IBZ', $first['airport_code']);
         $this->assertSame('Sat 25 Jul 2026 08:25 – Sat 25 Jul 2026 12:00', $first['raw_attributes']['outbound_flight'] ?? null);
         $this->assertSame('Tue 04 Aug 2026 10:45 – Tue 04 Aug 2026 12:25', $first['raw_attributes']['inbound_flight'] ?? null);
+        $this->assertSame(215, $first['flight_outbound_duration_minutes']);
+        $this->assertSame(100, $first['flight_inbound_duration_minutes']);
+        $this->assertNull($first['transfer_minutes']);
         $this->assertSame('jet2_smartsearch_api', $first['raw_attributes']['source'] ?? null);
         $this->assertTrue(str_starts_with((string) $first['provider_url'], '/beach/'));
+        foreach ($candidates as $i => $candidate) {
+            $this->assertArrayNotHasKey('images', $candidate, "candidate #{$i}: `images` must come from detail HTML only until a real smartsearch JSON fixture (with field paths) drives a separate test.");
+        }
     }
 
     public function test_it_falls_back_to_available_flight_when_selected_flight_id_missing(): void
@@ -125,6 +131,8 @@ class Jet2LiveImporterFixtureTest extends TestCase
         $this->assertSame('AGP', $candidates[0]['airport_code']);
         $this->assertSame('Sat 25 Jul 2026 08:05 – Sat 25 Jul 2026 12:10', $candidates[0]['raw_attributes']['outbound_flight'] ?? null);
         $this->assertSame('Tue 04 Aug 2026 13:20 – Tue 04 Aug 2026 15:35', $candidates[0]['raw_attributes']['inbound_flight'] ?? null);
+        $this->assertSame(245, $candidates[0]['flight_outbound_duration_minutes']);
+        $this->assertSame(135, $candidates[0]['flight_inbound_duration_minutes']);
     }
 
     public function test_it_prefers_selected_flight_id_over_selected_price_flight_id(): void
@@ -200,6 +208,8 @@ class Jet2LiveImporterFixtureTest extends TestCase
         $this->assertCount(1, $candidates);
         $this->assertSame('Sat 25 Jul 2026 07:25 – Sat 25 Jul 2026 11:25', $candidates[0]['raw_attributes']['outbound_flight'] ?? null);
         $this->assertSame('Tue 04 Aug 2026 12:20 – Tue 04 Aug 2026 14:25', $candidates[0]['raw_attributes']['inbound_flight'] ?? null);
+        $this->assertSame(240, $candidates[0]['flight_outbound_duration_minutes']);
+        $this->assertSame(125, $candidates[0]['flight_inbound_duration_minutes']);
     }
 
     private function readJet2ApiFixture(): string

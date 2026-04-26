@@ -25,7 +25,8 @@
                             <span class="text-xs font-medium text-teal-700">Smarter holiday search</span>
                         </span>
                     </a>
-                    <nav class="flex items-center gap-2">
+                    <nav class="flex flex-wrap items-center justify-end gap-2">
+                        <a href="{{ route('holidays.index') }}" class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900">Browse</a>
                         <a href="{{ route('searches.index') }}" class="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900">My Searches</a>
                         <a href="{{ route('searches.create') }}" class="rounded-lg bg-teal-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700">New Search</a>
                     </nav>

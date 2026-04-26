@@ -6,7 +6,6 @@ use App\Enums\SavedHolidaySearchRunStatus;
 use App\Models\ProviderImportSnapshot;
 use App\Models\SavedHolidaySearchRun;
 use App\Support\SyncQueueLine;
-use App\Support\SyncRunProgress;
 use Illuminate\Bus\Batch;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -59,18 +58,14 @@ class ParseProviderSnapshotJob implements ShouldQueue
                 'candidates' => count($candidates),
             ]);
 
-            SyncRunProgress::next('Run #'.$run->id.': normalising and enriching…');
-
             if ($candidates === []) {
                 SyncQueueLine::line('Run #'.$run->id.': no holiday rows in snapshot; scoring…');
-                SyncRunProgress::next('Run #'.$run->id.': scoring options…');
                 ScoreHolidayOptionsForSearchJob::dispatch($search->id, $run->id);
 
                 return;
             }
 
             $providerId = $snapshot->provider_source_id;
-            SyncRunProgress::startSubBar(\count($candidates));
             SyncQueueLine::line('Run #'.$run->id.': dispatching '.count($candidates).' detail-lookup job(s) (largest wait is usually here)…');
 
             $jobs = array_map(
@@ -83,11 +78,9 @@ class ParseProviderSnapshotJob implements ShouldQueue
                 ->allowFailures(false)
                 ->onQueue('default')
                 ->then(function () use ($search, $run) {
-                    SyncRunProgress::next('Run #'.$run->id.': scoring options…');
                     ScoreHolidayOptionsForSearchJob::dispatch($search->id, $run->id);
                 })
                 ->catch(function (Batch $batch, Throwable $e) use ($run) {
-                    SyncRunProgress::onFailure($e);
                     $r = SavedHolidaySearchRun::query()->find($run->id);
                     if ($r) {
                         $r->status = SavedHolidaySearchRunStatus::Failed;
@@ -102,7 +95,6 @@ class ParseProviderSnapshotJob implements ShouldQueue
                 })
                 ->dispatch();
         } catch (Throwable $e) {
-            SyncRunProgress::onFailure($e);
             $run->status = SavedHolidaySearchRunStatus::Failed;
             $run->finished_at = now();
             $run->error_message = $e->getMessage();

@@ -11,7 +11,7 @@ trait ExtractsEmbeddedJson
     {
         $docs = [];
 
-        if (preg_match_all('/<script[^>]*type="application\/ld\+json"[^>]*>(.*?)<\/script>/is', $html, $m)) {
+        if (preg_match_all('/<script[^>]*\btype\s*=\s*["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/is', $html, $m)) {
             foreach ($m[1] as $json) {
                 $json = trim(html_entity_decode((string) $json));
                 $decoded = json_decode($json, true);

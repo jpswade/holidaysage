@@ -6,6 +6,7 @@ use App\Contracts\HolidayScorer;
 use App\Services\ProviderImport\Jet2SmartSearchHttpClient;
 use App\Services\Scoring\DefaultHolidayScorer;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
@@ -34,6 +35,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Paginator::useTailwind();
+
         if (filter_var(env('TRUSTED_PROXY_ALL', false), FILTER_VALIDATE_BOOL)) {
             Request::setTrustedProxies(
                 ['*'],

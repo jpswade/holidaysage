@@ -9,7 +9,7 @@
         </div>
 
         <div class="mt-5">
-            @include('searches.partials.search-summary-bar', ['summary' => $summary])
+            @include('searches.partials.search-summary-bar', ['summary' => $summary, 'detailed' => true])
         </div>
 
         <div class="mt-4 text-sm text-slate-600">
