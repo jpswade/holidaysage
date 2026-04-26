@@ -1,4 +1,4 @@
-@props(['title' => 'HolidaySage', 'contentMax' => 'max-w-6xl'])
+@props(['title' => 'HolidaySage', 'contentMax' => 'max-w-7xl'])
 
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">

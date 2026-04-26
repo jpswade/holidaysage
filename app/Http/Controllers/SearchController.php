@@ -14,12 +14,11 @@ use App\Models\ScoredHolidayOption;
 use App\Services\Imports\ImportUrlParserRegistry;
 use App\Services\Providers\ProviderSourceResolver;
 use App\Support\SavedHolidaySearchDisplayName;
+use App\Support\ScoredHolidayResultsFilter;
 use App\Support\SearchFormPrefill;
 use App\ViewModels\ResultCardViewModel;
 use App\ViewModels\SearchSummaryViewModel;
 use App\ViewModels\TopPickViewModel;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,6 +29,10 @@ use InvalidArgumentException;
 
 class SearchController extends Controller
 {
+    public function __construct(
+        private readonly ScoredHolidayResultsFilter $scoredHolidayResultsFilter,
+    ) {}
+
     public function index(): View
     {
         $searches = SavedHolidaySearch::query()
@@ -145,15 +148,15 @@ class SearchController extends Controller
             ->first();
 
         $perPage = (int) config('holidaysage.search_results_per_page', 18);
-        $resultsSort = $this->normaliseResultsSort((string) $request->query('sort', 'rank'));
+        $resultsSort = $this->scoredHolidayResultsFilter->normaliseSort((string) $request->query('sort', 'rank'));
         $resultsQuery = trim((string) $request->query('q', ''));
         $resultsQualifiedOnly = $request->boolean('qualified');
 
         if ($latestRun) {
             $listQuery = $latestRun->scoredOptions()
                 ->with(['holidayPackage.hotel.photos', 'holidayPackage.providerSource']);
-            $this->applyResultsListConstraints($listQuery, $request);
-            $this->applyResultsSort($listQuery, $resultsSort);
+            $this->scoredHolidayResultsFilter->applyListConstraints($listQuery, $request);
+            $this->scoredHolidayResultsFilter->applySort($listQuery, $resultsSort);
 
             $results = $listQuery
                 ->paginate($perPage)
@@ -163,7 +166,7 @@ class SearchController extends Controller
             $topPickQuery = $latestRun->scoredOptions()
                 ->with(['holidayPackage.hotel.photos', 'holidayPackage.providerSource'])
                 ->where('is_disqualified', false);
-            $this->applyResultsListConstraints($topPickQuery, $request);
+            $this->scoredHolidayResultsFilter->applyListConstraints($topPickQuery, $request);
             $topPickModel = $topPickQuery
                 ->orderByRaw('scored_holiday_options.rank_position IS NULL')
                 ->orderBy('scored_holiday_options.rank_position')
@@ -266,60 +269,6 @@ class SearchController extends Controller
             }
             $slug = $base.'-'.$count++;
         }
-    }
-
-    private function normaliseResultsSort(string $raw): string
-    {
-        return match ($raw) {
-            'price_low', 'price_high', 'score' => $raw,
-            default => 'rank',
-        };
-    }
-
-    private function applyResultsListConstraints(Builder|Relation $query, Request $request): void
-    {
-        $term = trim((string) $request->query('q', ''));
-        if ($term !== '') {
-            $like = '%'.addcslashes($term, '%_\\').'%';
-            $query->whereHas('holidayPackage', function (Builder $packageQuery) use ($like): void {
-                $packageQuery->whereHas('hotel', function (Builder $hotelQuery) use ($like): void {
-                    $hotelQuery->where('hotel_name', 'like', $like)
-                        ->orWhere('resort_name', 'like', $like)
-                        ->orWhere('destination_name', 'like', $like);
-                });
-            });
-        }
-
-        if ($request->boolean('qualified')) {
-            $query->where('is_disqualified', false);
-        }
-    }
-
-    private function applyResultsSort(Builder|Relation $query, string $sort): void
-    {
-        $query->reorder();
-        match ($sort) {
-            'price_low' => $query
-                ->leftJoin('holiday_packages as hp_sort', 'hp_sort.id', '=', 'scored_holiday_options.holiday_package_id')
-                ->select('scored_holiday_options.*')
-                ->orderByRaw('COALESCE(hp_sort.price_total, 999999999) asc')
-                ->orderByRaw('scored_holiday_options.rank_position IS NULL')
-                ->orderBy('scored_holiday_options.rank_position'),
-            'price_high' => $query
-                ->leftJoin('holiday_packages as hp_sort', 'hp_sort.id', '=', 'scored_holiday_options.holiday_package_id')
-                ->select('scored_holiday_options.*')
-                ->orderByRaw('COALESCE(hp_sort.price_total, 0) desc')
-                ->orderByRaw('scored_holiday_options.rank_position IS NULL')
-                ->orderBy('scored_holiday_options.rank_position'),
-            'score' => $query
-                ->orderByDesc('scored_holiday_options.overall_score')
-                ->orderByRaw('scored_holiday_options.rank_position IS NULL')
-                ->orderBy('scored_holiday_options.rank_position'),
-            default => $query
-                ->orderByRaw('scored_holiday_options.rank_position IS NULL')
-                ->orderBy('scored_holiday_options.rank_position')
-                ->orderByDesc('scored_holiday_options.overall_score'),
-        };
     }
 
     private function absoluteProviderUrl(?string $providerUrl, ?string $baseUrl): ?string

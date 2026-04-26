@@ -42,11 +42,11 @@ class FrontendCustomerPagesTest extends TestCase
 
         $response->assertOk();
         $response->assertSeeText('Browse holidays');
-        $response->assertSee('0 of 0 holidays', false);
         $response->assertSeeText('No results yet', false);
         $response->assertSeeText('Create a search', false);
-        $response->assertSeeText('Filters', false);
-        $response->assertSeeText('More filters', false);
+        $response->assertSeeText('Search results', false);
+        $response->assertSeeText('Sort by', false);
+        $response->assertSeeText('Hide disqualified', false);
         $response->assertSee(route('searches.create'));
         $response->assertSee(route('searches.index'));
     }
@@ -56,11 +56,11 @@ class FrontendCustomerPagesTest extends TestCase
         $this->seedBrowseHolidaysWithTwoBoardTypes();
 
         $response = $this->get(route('holidays.index', [
-            'board' => 'self_catering',
+            'q' => 'Inn',
         ]));
 
         $response->assertOk();
-        $response->assertSee('1 of 2 holidays', false);
+        $response->assertSee('1 option', false);
         $response->assertSee('Browse Self Catering Inn', false);
     }
 
@@ -70,7 +70,7 @@ class FrontendCustomerPagesTest extends TestCase
         $option = ScoredHolidayOption::query()->orderBy('id')->firstOrFail();
         $response = $this->get(route('holidays.index'));
         $response->assertOk();
-        $response->assertSee('1 of 1 holidays', false);
+        $response->assertSee('1 option', false);
         $response->assertSee('Sunrise Family Resort', false);
         $response->assertSee(route('searches.deals.show', [
             'search' => $option->saved_holiday_search_id,
