@@ -18,6 +18,8 @@
     $board = $vm->boardType ?? '—';
     $chips = $vm->featureChips;
     $summary = $vm->recommendationBlurb;
+    $highlights = $vm->recommendationHighlights;
+    $reviewLine = $vm->review;
     $caveats = $vm->warnings;
     $priceLine = $vm->priceTotal;
     $perPersonLine = $vm->pricePerPerson;
@@ -51,7 +53,12 @@
             </div>
         </div>
 
-        <p class="mt-2 text-sm tracking-wider text-amber-500">★★★★★</p>
+        @if (is_string($reviewLine) && $reviewLine !== '')
+            <p class="mt-2 inline-flex items-center gap-1.5 text-sm text-slate-600">
+                <x-lucide-star class="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+                <span>{{ $reviewLine }}</span>
+            </p>
+        @endif
 
         <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-slate-600 sm:gap-x-3.5 sm:text-sm">
             <span class="inline-flex items-center gap-1">
@@ -76,7 +83,21 @@
             </div>
         @endif
 
-        <p class="mt-3 line-clamp-3 flex-1 text-sm leading-relaxed text-slate-600">{{ $summary }}</p>
+        @if (!empty($highlights))
+            <div class="mt-3 rounded-xl border border-teal-100 bg-teal-50/50 p-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-teal-900/90">Why it suits your search</p>
+                <ul class="mt-2 list-none space-y-1.5 text-sm text-slate-800">
+                    @foreach ($highlights as $line)
+                        <li class="flex gap-2">
+                            <x-lucide-check class="mt-0.5 h-4 w-4 flex-shrink-0 text-teal-600" />
+                            <span class="leading-snug">{{ $line }}</span>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        <p class="mt-3 line-clamp-4 flex-1 text-sm leading-relaxed text-slate-600">{{ $summary }}</p>
 
         @if (!empty($caveats))
             <ul class="mt-2 space-y-0.5 text-xs text-amber-800 sm:text-sm">

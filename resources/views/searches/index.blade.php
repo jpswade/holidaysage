@@ -85,7 +85,7 @@
                             <p class="text-lg text-slate-600">options found</p>
                         </div>
 
-                        <a href="{{ route('searches.show', $search) }}" class="mt-4 inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">View Results</a>
+                        <a href="{{ route('holidays.index', ['search_id' => $search->id]) }}" class="mt-4 inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">View holidays</a>
                     </article>
                 @endforeach
             </div>

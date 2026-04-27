@@ -141,10 +141,11 @@ class ResultCardViewModelTest extends TestCase
         $scored->warning_flags = [];
         $scored->setRelation('holidayPackage', $package);
 
-        $blurb = ResultCardViewModel::fromModel($scored)->recommendationBlurb;
+        $vm = ResultCardViewModel::fromModel($scored);
 
-        $this->assertStringContainsString('five-star beachfront', $blurb);
-        $this->assertStringNotContainsString('Solid fit:', $blurb);
+        $this->assertStringContainsString('five-star beachfront', $vm->recommendationBlurb);
+        $this->assertStringNotContainsString('Solid fit:', $vm->recommendationBlurb);
+        $this->assertSame(['Some reason'], $vm->recommendationHighlights);
     }
 
     public function test_recommendation_blurb_uses_reasons_instead_of_templated_scorer_summary_when_no_intro(): void
@@ -167,9 +168,75 @@ class ResultCardViewModelTest extends TestCase
         $scored->warning_flags = [];
         $scored->setRelation('holidayPackage', $package);
 
-        $blurb = ResultCardViewModel::fromModel($scored)->recommendationBlurb;
+        $vm = ResultCardViewModel::fromModel($scored);
 
-        $this->assertStringContainsString('Kids club on site', $blurb);
-        $this->assertStringNotContainsString('Solid fit:', $blurb);
+        $this->assertStringContainsString('Kids club on site', $vm->recommendationBlurb);
+        $this->assertStringNotContainsString('Solid fit:', $vm->recommendationBlurb);
+        $this->assertSame([], $vm->recommendationHighlights);
+    }
+
+    public function test_recommendation_highlights_omit_generic_scorer_padding_when_intro_present(): void
+    {
+        $hotel = new Hotel([
+            'hotel_name' => 'Test Hotel',
+            'destination_name' => 'Majorca',
+            'introduction_snippet' => 'A luxury five-star beachfront resort with extensive pools, spa facilities, and a private stretch of sand. Family-friendly dining and evening entertainment are included year-round.',
+        ]);
+        $package = new HolidayPackage(['nights' => 7, 'price_total' => 2000, 'price_per_person' => 1000, 'provider_url' => '/x']);
+        $package->setRelation('hotel', $hotel);
+        $package->setRelation('providerSource', new ProviderSource(['name' => 'Jet2']));
+
+        $scored = new ScoredHolidayOption;
+        $scored->id = 1;
+        $scored->overall_score = 7.5;
+        $scored->rank_position = 1;
+        $scored->is_disqualified = false;
+        $scored->recommendation_summary = 'Solid fit: Test Hotel in Majorca scores 7.5/10.';
+        $scored->recommendation_reasons = [
+            'Strong guest ratings for this property',
+            'Balanced option across the criteria you care about',
+        ];
+        $scored->warning_flags = [];
+        $scored->setRelation('holidayPackage', $package);
+
+        $vm = ResultCardViewModel::fromModel($scored);
+
+        $this->assertSame([], $vm->recommendationHighlights);
+        $this->assertStringContainsString('five-star beachfront', $vm->recommendationBlurb);
+    }
+
+    public function test_recommendation_blurb_uses_hotel_facts_when_only_generic_reasons(): void
+    {
+        $hotel = new Hotel([
+            'hotel_name' => 'Coastal Inn',
+            'destination_name' => 'Majorca',
+            'resort_name' => 'Alcudia',
+            'star_rating' => 4,
+            'distance_to_beach_meters' => 220,
+            'pools_count' => 2,
+        ]);
+        $package = new HolidayPackage(['nights' => 7, 'price_total' => 1200, 'price_per_person' => 600, 'provider_url' => '/x']);
+        $package->setRelation('hotel', $hotel);
+        $package->setRelation('providerSource', new ProviderSource(['name' => 'Jet2']));
+
+        $scored = new ScoredHolidayOption;
+        $scored->id = 1;
+        $scored->overall_score = 8.0;
+        $scored->rank_position = 1;
+        $scored->is_disqualified = false;
+        $scored->recommendation_summary = 'Solid fit: Coastal Inn in Majorca scores 8.0/10.';
+        $scored->recommendation_reasons = [
+            'Strong guest ratings for this property',
+            'Balanced option across the criteria you care about',
+        ];
+        $scored->warning_flags = [];
+        $scored->setRelation('holidayPackage', $package);
+
+        $vm = ResultCardViewModel::fromModel($scored);
+
+        $this->assertStringContainsString('Alcudia', $vm->recommendationBlurb);
+        $this->assertStringContainsString('Majorca', $vm->recommendationBlurb);
+        $this->assertStringNotContainsString('Balanced option', $vm->recommendationBlurb);
+        $this->assertStringNotContainsString('Strong guest ratings', $vm->recommendationBlurb);
     }
 }

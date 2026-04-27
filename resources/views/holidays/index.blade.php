@@ -1,5 +1,9 @@
 @php
     $holidaysTotal = (int) ($holidaysTotal ?? 0);
+    $scopedSearch = $scopedSearch ?? null;
+    $holidaysResetQueryUrl = $scopedSearch
+        ? route('holidays.index', ['search_id' => $scopedSearch->id])
+        : route('holidays.index');
 @endphp
 
 <x-layouts.app-shell title="Browse holidays - HolidaySage">
@@ -7,6 +11,14 @@
         <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div>
                 <h1 class="text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl">Browse holidays</h1>
+                @if ($scopedSearch)
+                    <p class="mt-2 text-base text-slate-600">
+                        Showing options for
+                        <span class="font-semibold text-slate-900">{{ $scopedSearch->name }}</span>
+                        <span class="text-slate-500">·</span>
+                        <a href="{{ route('holidays.index') }}" class="font-medium text-teal-700 hover:text-teal-800">Clear filter</a>
+                    </p>
+                @endif
                 @if ($results->total() > 0)
                     <p class="mt-1 text-slate-600">
                         @if ($results->hasPages())
@@ -21,6 +33,8 @@
 
         @include('partials.scored-holiday-results-filter-form', [
             'action' => route('holidays.index'),
+            'searchId' => $scopedSearch?->id,
+            'resetUrl' => $holidaysResetQueryUrl,
             'resultsQuery' => $resultsQuery,
             'resultsSort' => $resultsSort,
             'resultsQualifiedOnly' => $resultsQualifiedOnly,
@@ -43,7 +57,7 @@
                         <a href="{{ route('searches.create') }}" class="mt-4 inline-block text-sm font-semibold text-teal-700 hover:text-teal-800">Create a search</a>
                     @else
                         <p class="text-base font-medium text-slate-800">No options match your filters.</p>
-                        <p class="mt-2 text-sm text-slate-600">Try a different keyword, sort order, or <a href="{{ route('holidays.index') }}" class="font-semibold text-teal-700 hover:text-teal-800">reset filters</a>.</p>
+                        <p class="mt-2 text-sm text-slate-600">Try a different keyword, sort order, or <a href="{{ $holidaysResetQueryUrl }}" class="font-semibold text-teal-700 hover:text-teal-800">reset filters</a>.</p>
                     @endif
                 </div>
             </div>

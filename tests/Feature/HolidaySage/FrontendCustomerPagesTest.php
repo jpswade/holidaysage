@@ -44,7 +44,7 @@ class FrontendCustomerPagesTest extends TestCase
         $response->assertSeeText('Browse holidays');
         $response->assertSeeText('No results yet', false);
         $response->assertSeeText('Create a search', false);
-        $response->assertSeeText('Search results', false);
+        $response->assertSeeText('Filter by keyword', false);
         $response->assertSeeText('Sort by', false);
         $response->assertSeeText('Hide disqualified', false);
         $response->assertSee(route('searches.create'));
@@ -62,6 +62,11 @@ class FrontendCustomerPagesTest extends TestCase
         $response->assertOk();
         $response->assertSee('1 option', false);
         $response->assertSee('Browse Self Catering Inn', false);
+    }
+
+    public function test_browse_holidays_returns_404_for_unknown_search_id(): void
+    {
+        $this->get(route('holidays.index', ['search_id' => 999_999_999]))->assertNotFound();
     }
 
     public function test_browse_holidays_lists_imported_recommendations_when_data_exists(): void
@@ -178,48 +183,58 @@ class FrontendCustomerPagesTest extends TestCase
             'feature_preferences' => ['family_friendly', 'near_beach'],
         ]);
 
-        $post->assertRedirect();
+        $id = (int) SavedHolidaySearch::query()
+            ->where('name', 'Summer Family Holiday')
+            ->value('id');
+        $this->assertGreaterThan(0, $id);
+        $post->assertRedirect(route('holidays.index', ['search_id' => $id]));
         $this->assertDatabaseHas('saved_holiday_searches', [
             'name' => 'Summer Family Holiday',
             'departure_airport_code' => 'MAN',
         ]);
     }
 
-    public function test_saved_searches_and_show_page_render_ranked_data(): void
+    public function test_saved_searches_list_links_to_browse_holidays_for_search(): void
     {
         $search = $this->seedScoredSearch();
 
         $index = $this->get(route('searches.index'));
         $index->assertOk()->assertSee($search->name);
+        $index->assertSee(route('holidays.index', ['search_id' => $search->id]), false);
 
         $show = $this->get(route('searches.show', $search));
-        $show->assertOk();
-        $show->assertSee('Top');
-        $show->assertSee('recommended options');
-        $show->assertSee('From MAN');
-        $show->assertSee('Features');
-        $show->assertSee('Kids club');
-        $show->assertDontSee('Recent run activity');
+        $show->assertRedirect(route('holidays.index', ['search_id' => $search->id]));
+
+        $holidays = $this->get(route('holidays.index', ['search_id' => $search->id]));
+        $holidays->assertOk();
+        $holidays->assertSee('Sunrise Family Resort', false);
+        $holidays->assertSee($search->name, false);
+        $holidays->assertSee('Browse holidays', false);
 
         $results = $this->get(route('searches.results', $search));
-        $results->assertRedirect(route('searches.show', $search));
+        $results->assertRedirect(route('holidays.index', ['search_id' => $search->id]));
     }
 
-    public function test_saved_search_show_page_paginates_ranked_options(): void
+    public function test_browse_holidays_paginates_when_scoped_to_saved_search(): void
     {
         Config::set('holidaysage.search_results_per_page', 2);
         $search = $this->seedSearchWithRankedOptionCount(5);
 
-        $page1 = $this->get(route('searches.show', $search));
+        $page1 = $this->get(route('holidays.index', ['search_id' => $search->id]));
         $page1->assertOk();
-        $page1->assertSee('Top 5 recommended options', false);
         $page1->assertSee('Showing 1–2 of 5', false);
 
-        $page2 = $this->get(route('searches.show', ['search' => $search, 'page' => 2]));
+        $page2 = $this->get(route('holidays.index', [
+            'search_id' => $search->id,
+            'page' => 2,
+        ]));
         $page2->assertOk();
         $page2->assertSee('Showing 3–4 of 5', false);
 
-        $page3 = $this->get(route('searches.show', ['search' => $search, 'page' => 3]));
+        $page3 = $this->get(route('holidays.index', [
+            'search_id' => $search->id,
+            'page' => 3,
+        ]));
         $page3->assertOk();
         $page3->assertSee('Showing 5–5 of 5', false);
     }
@@ -246,7 +261,7 @@ class FrontendCustomerPagesTest extends TestCase
             'max_transfer_minutes' => null,
             'provider_import_url' => null,
             'feature_preferences' => ['near_beach', 'kids_club'],
-        ])->assertRedirect(route('searches.show', $search));
+        ])->assertRedirect(route('holidays.index', ['search_id' => $search->id]));
 
         $search->refresh();
         $this->assertSame('Updated holiday title', $search->name);
@@ -254,21 +269,27 @@ class FrontendCustomerPagesTest extends TestCase
         $this->assertContains('near_beach', $search->feature_preferences ?? []);
     }
 
-    public function test_show_filters_results_by_keyword(): void
+    public function test_browse_holidays_scoped_by_search_filters_by_keyword(): void
     {
         $search = $this->seedSearchWithRankedOptionCount(3);
 
-        $this->get(route('searches.show', ['search' => $search, 'q' => 'Test Resort 2']))
+        $this->get(route('holidays.index', [
+            'search_id' => $search->id,
+            'q' => 'Test Resort 2',
+        ]))
             ->assertOk()
             ->assertSee('Test Resort 2', false)
             ->assertDontSee('Test Resort 1', false);
     }
 
-    public function test_show_price_sort_orders_results(): void
+    public function test_browse_holidays_scoped_by_search_orders_by_price(): void
     {
         $search = $this->seedSearchWithRankedOptionCount(3);
 
-        $body = $this->get(route('searches.show', ['search' => $search, 'sort' => 'price_low']))
+        $body = $this->get(route('holidays.index', [
+            'search_id' => $search->id,
+            'sort' => 'price_low',
+        ]))
             ->assertOk()
             ->getContent();
 
@@ -313,7 +334,7 @@ class FrontendCustomerPagesTest extends TestCase
         ]);
 
         $response = $this->post(route('searches.refresh', $search));
-        $response->assertRedirect(route('searches.show', $search));
+        $response->assertRedirect(route('holidays.index', ['search_id' => $search->id]));
 
         Queue::assertPushed(RefreshSavedHolidaySearchJob::class, function (RefreshSavedHolidaySearchJob $job) use ($search): bool {
             return $job->savedHolidaySearchId === $search->id

@@ -9,30 +9,22 @@ use App\Http\Requests\StoreSavedHolidaySearchRequest;
 use App\Http\Requests\UpdateSavedHolidaySearchRequest;
 use App\Jobs\RefreshSavedHolidaySearchJob;
 use App\Models\SavedHolidaySearch;
-use App\Models\SavedHolidaySearchRun;
 use App\Models\ScoredHolidayOption;
 use App\Services\Imports\ImportUrlParserRegistry;
 use App\Services\Providers\ProviderSourceResolver;
 use App\Support\SavedHolidaySearchDisplayName;
-use App\Support\ScoredHolidayResultsFilter;
 use App\Support\SearchFormPrefill;
 use App\ViewModels\ResultCardViewModel;
 use App\ViewModels\SearchSummaryViewModel;
-use App\ViewModels\TopPickViewModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use InvalidArgumentException;
 
 class SearchController extends Controller
 {
-    public function __construct(
-        private readonly ScoredHolidayResultsFilter $scoredHolidayResultsFilter,
-    ) {}
-
     public function index(): View
     {
         $searches = SavedHolidaySearch::query()
@@ -100,7 +92,7 @@ class SearchController extends Controller
         $search->save();
 
         return redirect()
-            ->route('searches.show', $search)
+            ->route('holidays.index', $this->holidaysIndexQueryForSearch($search))
             ->with('status', 'Search updated. Run a refresh when you are ready to fetch new provider results.');
     }
 
@@ -135,66 +127,15 @@ class SearchController extends Controller
         ]);
 
         return redirect()
-            ->route('searches.show', $search)
+            ->route('holidays.index', $this->holidaysIndexQueryForSearch($search))
             ->with('status', 'Search created. We can start tracking results now.');
     }
 
-    public function show(Request $request, SavedHolidaySearch $search): View
+    public function show(Request $request, SavedHolidaySearch $search): RedirectResponse
     {
-        $search->load(['runs' => fn ($q) => $q->orderByDesc('id')->limit(5)]);
-        $latestRun = $search->runs->first() ?: SavedHolidaySearchRun::query()
-            ->where('saved_holiday_search_id', $search->id)
-            ->latest('id')
-            ->first();
+        $params = $this->holidaysIndexQueryForSearch($search, $request);
 
-        $perPage = (int) config('holidaysage.search_results_per_page', 18);
-        $resultsSort = $this->scoredHolidayResultsFilter->normaliseSort((string) $request->query('sort', 'rank'));
-        $resultsQuery = trim((string) $request->query('q', ''));
-        $resultsQualifiedOnly = $request->boolean('qualified');
-
-        if ($latestRun) {
-            $listQuery = $latestRun->scoredOptions()
-                ->with(['holidayPackage.hotel.photos', 'holidayPackage.providerSource']);
-            $this->scoredHolidayResultsFilter->applyListConstraints($listQuery, $request);
-            $this->scoredHolidayResultsFilter->applySort($listQuery, $resultsSort);
-
-            $results = $listQuery
-                ->paginate($perPage)
-                ->withQueryString()
-                ->through(fn (ScoredHolidayOption $row): ResultCardViewModel => ResultCardViewModel::fromModel($row));
-
-            $topPickQuery = $latestRun->scoredOptions()
-                ->with(['holidayPackage.hotel.photos', 'holidayPackage.providerSource'])
-                ->where('is_disqualified', false);
-            $this->scoredHolidayResultsFilter->applyListConstraints($topPickQuery, $request);
-            $topPickModel = $topPickQuery
-                ->orderByRaw('scored_holiday_options.rank_position IS NULL')
-                ->orderBy('scored_holiday_options.rank_position')
-                ->orderByDesc('scored_holiday_options.overall_score')
-                ->first();
-        } else {
-            $results = new LengthAwarePaginator([], 0, $perPage, 1, [
-                'path' => $request->url(),
-                'query' => $request->query(),
-            ]);
-            $topPickModel = null;
-        }
-
-        $topPick = $topPickModel
-            ? TopPickViewModel::fromResult(ResultCardViewModel::fromModel($topPickModel))
-            : null;
-        $summary = SearchSummaryViewModel::fromModel($search);
-
-        return view('searches.show', [
-            'search' => $search,
-            'summary' => $summary,
-            'latestRun' => $latestRun,
-            'topPick' => $topPick,
-            'results' => $results,
-            'resultsSort' => $resultsSort,
-            'resultsQuery' => $resultsQuery,
-            'resultsQualifiedOnly' => $resultsQualifiedOnly,
-        ]);
+        return redirect()->route('holidays.index', $params);
     }
 
     public function deal(SavedHolidaySearch $search, ScoredHolidayOption $scoredOption): View
@@ -217,7 +158,7 @@ class SearchController extends Controller
 
     public function results(SavedHolidaySearch $search): RedirectResponse
     {
-        return redirect()->route('searches.show', $search);
+        return redirect()->route('holidays.index', $this->holidaysIndexQueryForSearch($search));
     }
 
     public function import(
@@ -250,7 +191,7 @@ class SearchController extends Controller
         RefreshSavedHolidaySearchJob::dispatch($search->id, SavedHolidaySearchRunType::Manual->value);
 
         return redirect()
-            ->route('searches.show', $search)
+            ->route('holidays.index', $this->holidaysIndexQueryForSearch($search))
             ->with('status', 'Refresh queued. Results will update shortly.');
     }
 
@@ -269,6 +210,53 @@ class SearchController extends Controller
             }
             $slug = $base.'-'.$count++;
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function holidaysIndexQueryForSearch(SavedHolidaySearch $search, ?Request $request = null): array
+    {
+        $q = array_merge(
+            [
+                'search_id' => $search->id,
+            ],
+            $this->holidaysBrowseParamBag($request)
+        );
+
+        // Drop defaults so the URL is tidy.
+        if (isset($q['sort']) && (string) $q['sort'] === 'rank') {
+            unset($q['sort']);
+        }
+
+        return $q;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function holidaysBrowseParamBag(?Request $request): array
+    {
+        if (! $request) {
+            return [];
+        }
+
+        $q = [];
+        if ($request->integer('page') > 1) {
+            $q['page'] = (string) $request->integer('page');
+        }
+        if ($request->filled('q') && is_string($request->query('q')) && trim($request->query('q') ?? '') !== '') {
+            $q['q'] = (string) $request->query('q');
+        }
+        $sort = (string) $request->query('sort', 'rank');
+        if ($sort !== 'rank' && in_array($sort, ['price_low', 'price_high', 'score'], true)) {
+            $q['sort'] = $sort;
+        }
+        if ($request->boolean('qualified')) {
+            $q['qualified'] = 1;
+        }
+
+        return $q;
     }
 
     private function absoluteProviderUrl(?string $providerUrl, ?string $baseUrl): ?string

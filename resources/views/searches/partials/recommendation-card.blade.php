@@ -53,6 +53,20 @@
             </div>
         @endif
 
+        @if (!empty($card->recommendationHighlights))
+            <div class="mt-4 rounded-xl border border-teal-100 bg-teal-50/50 p-4">
+                <p class="text-xs font-semibold uppercase tracking-wide text-teal-900/90">Why it suits your search</p>
+                <ul class="mt-2 list-none space-y-2 text-base text-slate-800">
+                    @foreach ($card->recommendationHighlights as $line)
+                        <li class="flex gap-2.5">
+                            <x-lucide-check class="mt-0.5 h-5 w-5 flex-shrink-0 text-teal-600" />
+                            <span class="leading-relaxed">{{ $line }}</span>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
         <p class="mt-4 border-l-2 border-teal-200/80 pl-4 text-base leading-relaxed text-slate-700">
             {{ $card->recommendationBlurb }}
         </p>

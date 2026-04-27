@@ -2,15 +2,18 @@
 
 namespace App\Services;
 
+use App\Models\SavedHolidaySearch;
 use App\Models\ScoredHolidayOption;
 use App\Support\ScoredHolidayResultsFilter;
 use App\ViewModels\ResultCardViewModel;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 
 /**
- * Global /holidays list: one best row per holiday package, same filter/sort behaviour as a saved search show page.
+ * /holidays: global list is one best row per holiday package; with `?search_id=` the list matches the latest
+ * run for that saved search, using the same filters as global browse.
  */
 final class BrowseHolidaysQuery
 {
@@ -19,14 +22,14 @@ final class BrowseHolidaysQuery
     ) {}
 
     /**
-     * @return LengthAwarePaginator<int, array{viewModel: ResultCardViewModel, search: \App\Models\SavedHolidaySearch|null, displayRank: int}>
+     * @return LengthAwarePaginator<int, array{viewModel: ResultCardViewModel, search: SavedHolidaySearch|null, displayRank: int}>
      */
-    public function paginate(Request $request): LengthAwarePaginator
+    public function paginate(Request $request, ?SavedHolidaySearch $searchScope = null): LengthAwarePaginator
     {
         $perPage = (int) config('holidaysage.search_results_per_page', 18);
         $sort = $this->scoredHolidayResultsFilter->normaliseSort((string) $request->query('sort', 'rank'));
 
-        $query = $this->baseListQuery();
+        $query = $this->listQueryForRequest($searchScope);
         $this->scoredHolidayResultsFilter->applyListConstraints($query, $request);
         $this->scoredHolidayResultsFilter->applySort($query, $sort);
 
@@ -44,9 +47,39 @@ final class BrowseHolidaysQuery
         return $paginator;
     }
 
-    public function totalUnfilteredCount(): int
+    public function totalUnfilteredCount(?SavedHolidaySearch $searchScope = null): int
     {
+        if ($searchScope) {
+            $run = $searchScope->runs()->orderByDesc('id')->first();
+            if (! $run) {
+                return 0;
+            }
+
+            return (int) $run->scoredOptions()->count();
+        }
+
         return (int) $this->baseQuery()->count();
+    }
+
+    /**
+     * @return Builder|Relation
+     */
+    private function listQueryForRequest(?SavedHolidaySearch $searchScope)
+    {
+        if ($searchScope) {
+            $run = $searchScope->runs()->orderByDesc('id')->first();
+            if (! $run) {
+                return ScoredHolidayOption::query()->whereRaw('0 = 1');
+            }
+
+            return $run->scoredOptions()->with([
+                'search',
+                'holidayPackage.hotel.photos',
+                'holidayPackage.providerSource',
+            ]);
+        }
+
+        return $this->baseListQuery();
     }
 
     private function baseListQuery(): Builder

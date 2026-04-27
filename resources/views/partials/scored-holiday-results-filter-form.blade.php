@@ -1,13 +1,23 @@
 @props([
     'action',
+    'resetUrl' => null,
+    'searchId' => null,
+    'keywordLabel' => 'Filter by keyword',
     'resultsQuery' => '',
     'resultsSort' => 'rank',
     'resultsQualifiedOnly' => false,
 ])
+@php
+    $resetUrl = is_string($resetUrl) && $resetUrl !== '' ? $resetUrl : $action;
+    $searchId = is_int($searchId) || (is_string($searchId) && is_numeric($searchId)) ? (int) $searchId : null;
+@endphp
 
 <form method="get" action="{{ $action }}" class="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:flex-wrap md:items-end">
+    @if ($searchId !== null && $searchId > 0)
+        <input type="hidden" name="search_id" value="{{ $searchId }}" />
+    @endif
     <div class="min-w-0 flex-1 md:max-w-xs">
-        <label for="results-q" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Search results</label>
+        <label for="results-q" class="block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $keywordLabel }}</label>
         <div class="relative mt-1">
             <x-lucide-search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input id="results-q" type="search" name="q" value="{{ $resultsQuery }}" placeholder="Hotel, resort, destination…" class="w-full rounded-lg border-slate-300 py-2 pl-9 pr-3 text-sm shadow-sm focus:border-teal-500 focus:ring-teal-500" autocomplete="off" />
@@ -31,6 +41,6 @@
             <x-lucide-filter class="h-4 w-4" />
             Apply
         </button>
-        <a href="{{ $action }}" class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Reset</a>
+        <a href="{{ $resetUrl }}" class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Reset</a>
     </div>
 </form>

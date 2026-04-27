@@ -1,8 +1,8 @@
 <x-layouts.app-shell :title="'Refine search: ' . $search->name . ' - HolidaySage'">
     <section class="mx-auto max-w-4xl">
-        <a href="{{ route('searches.show', $search) }}" class="inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-700">
+        <a href="{{ route('holidays.index', ['search_id' => $search->id]) }}" class="inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-700">
             <x-lucide-arrow-left class="h-4 w-4" />
-            Back to results
+            Back to holidays
         </a>
 
         <h1 class="mt-4 text-3xl font-bold tracking-tight text-slate-900">Refine your search</h1>

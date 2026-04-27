@@ -487,10 +487,42 @@ class DefaultHolidayScorer implements HolidayScorer
             $r[] = 'Good on-site facilities for younger guests';
         }
         if (count($r) < 2) {
-            $r[] = 'Balanced option across the criteria you care about';
+            $extra = self::hotelTextureReason($option);
+            if ($extra !== null) {
+                $r[] = $extra;
+            }
         }
 
         return array_slice($r, 0, 5);
+    }
+
+    /**
+     * Short, factual copy about the property (not generic “balanced” padding).
+     */
+    private static function hotelTextureReason(HolidayPackage $option): ?string
+    {
+        $h = $option->hotel;
+        if ($h === null) {
+            return null;
+        }
+        $beach = $h->distance_to_beach_meters;
+        if ($beach !== null && (int) $beach > 0 && (int) $beach <= 450) {
+            return 'Short walk to the beach';
+        }
+        $centre = $h->distance_to_centre_meters;
+        if ($centre !== null && (int) $centre > 0 && (int) $centre <= 1200) {
+            return 'Close to the resort centre';
+        }
+        $pools = $h->pools_count;
+        if ($pools !== null && (int) $pools >= 3) {
+            return 'Plenty of on-site pools and leisure space';
+        }
+        $resort = trim((string) ($h->resort_name ?? ''));
+        if ($resort !== '') {
+            return 'Located in '.$resort;
+        }
+
+        return null;
     }
 
     /**

@@ -1,8 +1,8 @@
 <x-layouts.app-shell :title="$card->hotelName . ' Deal - HolidaySage'">
     <section>
-        <a href="{{ route('searches.show', $search) }}" class="inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-700">
+        <a href="{{ route('holidays.index', ['search_id' => $search->id]) }}" class="inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-700">
             <x-lucide-arrow-left class="h-4 w-4" />
-            Back to results
+            Back to holidays
         </a>
 
         <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

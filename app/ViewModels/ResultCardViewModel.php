@@ -2,6 +2,7 @@
 
 namespace App\ViewModels;
 
+use App\Models\Hotel;
 use App\Models\ScoredHolidayOption;
 use App\Support\BoardBasisDisplay;
 use Illuminate\Support\Str;
@@ -9,6 +10,7 @@ use Illuminate\Support\Str;
 class ResultCardViewModel
 {
     /**
+     * @param  list<string>  $recommendationHighlights  Why it scored well (shown when hotel intro copy is used).
      * @param  list<string>  $reasons
      * @param  list<string>  $warnings
      * @param  list<string>  $featureChips
@@ -28,10 +30,8 @@ class ResultCardViewModel
         public readonly ?string $boardType,
         public readonly ?string $providerUrl,
         public readonly ?string $recommendationSummary,
-        /**
-         * Primary paragraph for the card: prefer model summary, else join reasons, else a short fallback.
-         */
         public readonly string $recommendationBlurb,
+        public readonly array $recommendationHighlights,
         public readonly array $reasons,
         public readonly array $warnings,
         public readonly array $featureChips,
@@ -73,6 +73,20 @@ class ResultCardViewModel
         $reasonsList = array_values(array_filter(array_map('strval', $row->recommendation_reasons ?? [])));
         $boardLabel = BoardBasisDisplay::humanLabel($package?->board_type, $package?->board_recommended);
 
+        $introduction = $hotel?->introduction_snippet !== null ? (string) $hotel->introduction_snippet : null;
+        $editorialUsed = self::normaliseEditorialIntro($introduction) !== '';
+
+        $recommendationBlurb = self::buildRecommendationBlurb(
+            $introduction,
+            $row->recommendation_summary,
+            $reasonsList,
+            $review,
+            $hotel?->destination_name ? (string) $hotel->destination_name : '',
+            $boardLabel,
+            $hotel?->hotel_name ? (string) $hotel->hotel_name : 'This hotel',
+            $hotel,
+        );
+
         return new self(
             id: $row->id,
             rank: $row->rank_position !== null ? (int) $row->rank_position : null,
@@ -88,15 +102,10 @@ class ResultCardViewModel
             boardType: $boardLabel,
             providerUrl: $package?->provider_url,
             recommendationSummary: $row->recommendation_summary,
-            recommendationBlurb: self::buildRecommendationBlurb(
-                $hotel?->introduction_snippet !== null ? (string) $hotel->introduction_snippet : null,
-                $row->recommendation_summary,
-                $reasonsList,
-                $review,
-                $hotel?->destination_name ? (string) $hotel->destination_name : '',
-                $boardLabel,
-                $hotel?->hotel_name ? (string) $hotel->hotel_name : 'This hotel',
-            ),
+            recommendationBlurb: $recommendationBlurb,
+            recommendationHighlights: $editorialUsed
+                ? self::topRecommendationHighlights(self::filterSpecificReasons($reasonsList))
+                : [],
             reasons: $reasonsList,
             warnings: array_values(array_filter(array_map('strval', $row->warning_flags ?? []))),
             featureChips: $featureChips,
@@ -107,8 +116,97 @@ class ResultCardViewModel
     }
 
     /**
+     * @param  list<string>  $reasons  Already filtered to drop generic scorer padding.
+     * @return list<string>
+     */
+    private static function topRecommendationHighlights(array $reasons): array
+    {
+        $out = [];
+        foreach (array_slice($reasons, 0, 3) as $r) {
+            $t = trim((string) $r);
+            if ($t === '') {
+                continue;
+            }
+            $out[] = Str::limit($t, 130, '…');
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<string>  $reasons
+     * @return list<string>
+     */
+    private static function filterSpecificReasons(array $reasons): array
+    {
+        return array_values(array_filter(
+            $reasons,
+            static fn (string $s): bool => ! self::isGenericScorerPadding($s)
+        ));
+    }
+
+    private static function isGenericScorerPadding(string $line): bool
+    {
+        $n = strtolower(trim($line));
+
+        return in_array($n, [
+            'strong guest ratings for this property',
+            'balanced option across the criteria you care about',
+        ], true);
+    }
+
+    /**
+     * When we have no long intro, still give a short sense of place and facilities (not review padding).
+     */
+    private static function hotelAtmosphereLine(?Hotel $hotel): ?string
+    {
+        if ($hotel === null) {
+            return null;
+        }
+
+        $parts = [];
+        $resort = trim((string) ($hotel->resort_name ?? ''));
+        $dest = trim((string) ($hotel->destination_name ?? ''));
+        if ($resort !== '' && $dest !== '') {
+            $parts[] = 'Set in '.$resort.', '.$dest;
+        } elseif ($dest !== '') {
+            $parts[] = 'Located in '.$dest;
+        }
+
+        $sr = $hotel->star_rating;
+        if ($sr !== null && $sr !== '' && is_numeric($sr) && (float) $sr > 0) {
+            $parts[] = (int) round((float) $sr).'-star property';
+        }
+
+        $dBeach = $hotel->distance_to_beach_meters;
+        if ($dBeach !== null && is_numeric($dBeach)) {
+            $m = (int) $dBeach;
+            if ($m > 0 && $m <= 500) {
+                $parts[] = 'beach within about '.$m.'m';
+            } elseif ($m > 500 && $m <= 2500) {
+                $parts[] = 'around '.round($m / 1000, 1).'km from the beach';
+            }
+        }
+
+        if ($hotel->pools_count !== null && (int) $hotel->pools_count >= 2) {
+            $parts[] = (int) $hotel->pools_count.' pools on site';
+        }
+
+        if ($parts === []) {
+            return null;
+        }
+
+        $sentence = $parts[0];
+        if (count($parts) > 1) {
+            $sentence .= '. '.implode(', ', array_slice($parts, 1));
+        }
+
+        return Str::limit($sentence.'.', 420, '…');
+    }
+
+    /**
      * Primary editorial copy: prefer the provider/hotel description (e.g. Jet2 intro text), which
-     * matches the v0 “long paragraph” style. The scorer’s {@see recommendation_summary} is often
+     * matches the v0 “long paragraph” style. The default scorer summary is often
      * a short “Solid fit:” template — that should not win when richer hotel copy exists.
      *
      * @param  list<string>  $reasons
@@ -121,6 +219,7 @@ class ResultCardViewModel
         string $destinationName,
         ?string $boardType,
         string $hotelName,
+        ?Hotel $hotel,
     ): string {
         $editorial = self::normaliseEditorialIntro($introductionSnippet);
         if ($editorial !== '') {
@@ -132,41 +231,47 @@ class ResultCardViewModel
             return $summary;
         }
 
-        $reasons = array_values(array_filter(
+        $trimmed = array_values(array_filter(
             array_map(trim(...), $reasons),
             fn (string $s): bool => $s !== ''
         ));
-        if ($reasons !== []) {
-            if (count($reasons) === 1) {
-                return $reasons[0].'.';
+        $specific = self::filterSpecificReasons($trimmed);
+        if ($specific !== []) {
+            if (count($specific) === 1) {
+                return $specific[0].'.';
             }
-            if (count($reasons) === 2) {
-                return $reasons[0].' and '.$reasons[1].'.';
+            if (count($specific) === 2) {
+                return $specific[0].' and '.$specific[1].'.';
             }
-            $last = array_pop($reasons);
+            $last = array_pop($specific);
 
-            return implode(', ', $reasons).', and '.$last.'.';
+            return implode(', ', $specific).', and '.$last.'.';
+        }
+
+        $hotelLine = self::hotelAtmosphereLine($hotel);
+        if ($hotelLine !== null && $hotelLine !== '') {
+            return $hotelLine;
         }
 
         $bits = [];
         if ($review !== null && $review !== '') {
-            $bits[] = 'guest ratings '.$review;
+            $bits[] = 'traveller reviews at '.$review;
         }
         if (is_string($boardType) && $boardType !== '') {
             $bits[] = $boardType;
         }
         if ($destinationName !== '') {
-            $bits[] = 'a strong setting in '.$destinationName;
+            $bits[] = 'a well-rated base in '.$destinationName;
         }
         if ($bits !== []) {
-            return 'Why it stands out: '.self::conjunctionFromBits($bits).'.';
+            return 'In brief: '.self::conjunctionFromBits($bits).'.';
         }
 
         if ($summary !== '') {
             return $summary;
         }
 
-        return 'A strong all-round match for this search: we balance price, reviews, and how well the property fits the preferences you set.';
+        return 'We score each option from your search against price, review profile, and the preferences you chose—so you can compare fairly at a glance.';
     }
 
     private const MAX_INTRO_LENGTH = 520;
@@ -188,7 +293,7 @@ class ResultCardViewModel
     }
 
     /**
-     * The default {@see \App\Services\Scoring\DefaultHolidayScorer} summary: factual but not editorial.
+     * The default scorer summary line: factual but not editorial.
      * Keep it as a last resort so recommendation_reasons and destination copy can read better first.
      */
     private static function isTemplatedScorerSummary(string $summary): bool

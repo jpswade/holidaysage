@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\SavedHolidaySearch;
 use App\Services\BrowseHolidaysQuery;
 use App\Support\ScoredHolidayResultsFilter;
 use Illuminate\Http\Request;
@@ -19,8 +20,9 @@ class HolidayBrowseController extends Controller
         $resultsQuery = trim((string) $request->query('q', ''));
         $resultsQualifiedOnly = $request->boolean('qualified');
 
-        $holidaysTotal = $browseHolidays->totalUnfilteredCount();
-        $results = $browseHolidays->paginate($request);
+        $searchScope = $this->searchScopeFromRequest($request);
+        $holidaysTotal = $browseHolidays->totalUnfilteredCount($searchScope);
+        $results = $browseHolidays->paginate($request, $searchScope);
 
         return view('holidays.index', [
             'results' => $results,
@@ -28,6 +30,21 @@ class HolidayBrowseController extends Controller
             'resultsSort' => $resultsSort,
             'resultsQuery' => $resultsQuery,
             'resultsQualifiedOnly' => $resultsQualifiedOnly,
+            'scopedSearch' => $searchScope,
         ]);
+    }
+
+    private function searchScopeFromRequest(Request $request): ?SavedHolidaySearch
+    {
+        if (! $request->filled('search_id')) {
+            return null;
+        }
+        if (! is_numeric($request->query('search_id')) || (int) $request->query('search_id') < 1) {
+            abort(404);
+        }
+        $search = SavedHolidaySearch::query()->find((int) $request->query('search_id'));
+        abort_if($search === null, 404);
+
+        return $search;
     }
 }
