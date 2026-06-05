@@ -38,6 +38,10 @@
             'resultsQuery' => $resultsQuery,
             'resultsSort' => $resultsSort,
             'resultsQualifiedOnly' => $resultsQualifiedOnly,
+            'resultsProviders' => $resultsProviders ?? [],
+            'resultsBoards' => $resultsBoards ?? [],
+            'resultsMaxTransfer' => $resultsMaxTransfer ?? null,
+            'availableProviders' => $availableProviders ?? [],
         ])
 
         @if ($holidaysTotal > 0)

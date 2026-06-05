@@ -1,13 +1,23 @@
 @props(['holiday'])
 
 @php
+    use App\ViewModels\ResultCardViewModel;
+
     assert(is_array($holiday));
     $vm = $holiday['viewModel'] ?? null;
-    assert($vm instanceof \App\ViewModels\ResultCardViewModel);
+    assert($vm instanceof ResultCardViewModel);
     $search = $holiday['search'] ?? null;
-    $primaryUrl = $search
-        ? route('searches.deals.show', [$search, $vm->id])
-        : route('searches.create', []);
+
+    $detailParams = ['slug' => $vm->canonicalPropertySlug];
+    if ($vm->id > 0 && $vm->canonicalPropertySlug !== null) {
+        $detailParams['p'] = $vm->id;
+    }
+    $detailUrl = $vm->canonicalPropertySlug !== null
+        ? route('holidays.show', $detailParams)
+        : ($search ? route('searches.deals.show', [$search, $vm->id]) : route('holidays.index'));
+    $providerUrl = is_string($vm->providerUrl) && $vm->providerUrl !== '' ? $vm->providerUrl : null;
+    $providerCtaLabel = 'View on '.$vm->providerName;
+
     $rankLabel = (string) ($holiday['displayRank'] ?? '—');
     $hotel = $vm->hotelName;
     $destination = $vm->destinationName;
@@ -16,6 +26,9 @@
     $flight = $vm->flightOutbound ?? '—';
     $transfer = $vm->transfer ?? '—';
     $board = $vm->boardType ?? '—';
+    $nights = is_string($vm->nights) && $vm->nights !== '' ? $vm->nights : null;
+    $airport = is_string($vm->departureAirport) && $vm->departureAirport !== '' ? $vm->departureAirport : null;
+    $reasons = array_values(array_slice(array_filter(array_map(static fn ($r) => is_string($r) ? trim($r) : '', $vm->reasons ?? [])), 0, 4));
     $chips = $vm->featureChips;
     $summary = $vm->recommendationBlurb;
     $highlights = $vm->recommendationHighlights;
@@ -24,6 +37,8 @@
     $priceLine = $vm->priceTotal;
     $perPersonLine = $vm->pricePerPerson;
     $imageUrl = is_string($vm->imageUrl) ? trim($vm->imageUrl) : '';
+
+    $shortlistRoute = \Illuminate\Support\Facades\Route::has('saved.items.store') ? route('saved.items.store') : null;
 @endphp
 
 <article class="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -42,7 +57,9 @@
     <div class="flex flex-1 flex-col p-4 sm:p-5">
         <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-                <h3 class="text-xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl">{{ $hotel }}</h3>
+                <h3 class="text-xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-2xl">
+                    <a href="{{ $detailUrl }}" class="hover:underline focus:outline focus:outline-2 focus:outline-teal-500">{{ $hotel }}</a>
+                </h3>
                 <p class="mt-1 line-clamp-1 text-sm text-slate-600 sm:text-base">
                     <span class="align-middle">{{ $destination }}</span>
                 </p>
@@ -61,6 +78,12 @@
         @endif
 
         <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-slate-600 sm:gap-x-3.5 sm:text-sm">
+            @if ($airport)
+                <span class="inline-flex items-center gap-1">
+                    <x-lucide-plane-takeoff class="h-3.5 w-3.5 text-slate-400 sm:h-4 sm:w-4" />
+                    {{ $airport }}
+                </span>
+            @endif
             <span class="inline-flex items-center gap-1">
                 <x-lucide-plane class="h-3.5 w-3.5 text-slate-400 sm:h-4 sm:w-4" />
                 {{ $flight }}
@@ -69,13 +92,25 @@
                 <x-lucide-clock-3 class="h-3.5 w-3.5 text-slate-400 sm:h-4 sm:w-4" />
                 {{ $transfer }}
             </span>
+            @if ($nights)
+                <span class="inline-flex items-center gap-1">
+                    <x-lucide-calendar-days class="h-3.5 w-3.5 text-slate-400 sm:h-4 sm:w-4" />
+                    {{ $nights }}
+                </span>
+            @endif
             <span class="inline-flex min-w-0 items-center gap-1">
                 <x-lucide-utensils class="h-3.5 w-3.5 flex-shrink-0 text-slate-400 sm:h-4 sm:w-4" />
                 <span class="min-w-0 shrink">{{ $board }}</span>
             </span>
         </div>
 
-        @if (!empty($chips))
+        @if ($reasons !== [])
+            <div class="mt-2.5 flex flex-wrap gap-1.5 sm:mt-3 sm:gap-2" aria-label="Why we recommend">
+                @foreach ($reasons as $reason)
+                    <span class="rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-800 sm:px-2.5 sm:py-1">{{ $reason }}</span>
+                @endforeach
+            </div>
+        @elseif (! empty($chips))
             <div class="mt-2.5 flex flex-wrap gap-1.5 sm:mt-3 sm:gap-2">
                 @foreach (array_slice($chips, 0, 4) as $chip)
                     <span class="rounded-full border border-slate-200 bg-slate-50/90 px-2 py-0.5 text-xs font-medium text-slate-700 sm:px-2.5 sm:py-1">{{ $chip }}</span>
@@ -110,17 +145,35 @@
             </ul>
         @endif
 
-        <div class="mt-3 flex flex-col gap-2.5 border-t border-slate-200 pt-3.5 sm:mt-4 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:pt-4">
-            <div>
-                <p class="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{{ $priceLine }}</p>
-                <p class="text-sm text-slate-600">{{ $perPersonLine }}</p>
+        <div class="mt-3 border-t border-slate-200 pt-3.5 sm:mt-4 sm:pt-4">
+            <div class="flex flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+                <div>
+                    <p class="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{{ $priceLine }}</p>
+                    <p class="text-sm text-slate-600">{{ $perPersonLine }}</p>
+                </div>
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+                    @if ($shortlistRoute && $vm->id > 0)
+                        <form method="post" action="{{ $shortlistRoute }}" class="inline-flex">
+                            @csrf
+                            <input type="hidden" name="scored_holiday_option_id" value="{{ $vm->id }}" />
+                            <input type="hidden" name="return_to" value="{{ url()->full() }}" />
+                            <button type="submit" class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 sm:w-auto">
+                                <x-lucide-bookmark class="h-4 w-4" />
+                                Save
+                            </button>
+                        </form>
+                    @endif
+                    @if ($providerUrl)
+                        <a href="{{ $providerUrl }}" target="_blank" rel="noopener noreferrer" class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 sm:w-auto">
+                            <x-lucide-external-link class="h-4 w-4" />
+                            {{ $providerCtaLabel }}
+                        </a>
+                    @endif
+                    <a href="{{ $detailUrl }}" class="inline-flex w-full items-center justify-center rounded-lg bg-teal-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 sm:w-auto">
+                        View details
+                    </a>
+                </div>
             </div>
-            <a
-                href="{{ $primaryUrl }}"
-                class="inline-flex w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 sm:min-w-[7.5rem] sm:w-auto"
-            >
-                View Deal
-            </a>
         </div>
     </div>
 </article>

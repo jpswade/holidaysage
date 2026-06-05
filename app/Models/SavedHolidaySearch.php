@@ -15,6 +15,8 @@ class SavedHolidaySearch extends Model
         'user_id',
         'name',
         'slug',
+        'share_token',
+        'sharing_enabled',
         'provider_import_url',
         'departure_airport_code',
         'departure_airport_name',
@@ -65,7 +67,44 @@ class SavedHolidaySearch extends Model
             'last_imported_at' => 'datetime',
             'last_scored_at' => 'datetime',
             'next_refresh_due_at' => 'datetime',
+            'sharing_enabled' => 'boolean',
         ];
+    }
+
+    public function ensureShareToken(): string
+    {
+        if (is_string($this->share_token) && trim($this->share_token) !== '') {
+            return (string) $this->share_token;
+        }
+        do {
+            $candidate = Str::lower(Str::random(24));
+        } while (self::query()->where('share_token', $candidate)->exists());
+        $this->forceFill(['share_token' => $candidate])->save();
+
+        return $candidate;
+    }
+
+    public function rotateShareToken(): string
+    {
+        do {
+            $candidate = Str::lower(Str::random(24));
+        } while (self::query()->where('share_token', $candidate)->exists());
+        $this->forceFill(['share_token' => $candidate])->save();
+
+        return $candidate;
+    }
+
+    public function enableSharing(): string
+    {
+        $token = $this->ensureShareToken();
+        $this->forceFill(['sharing_enabled' => true])->save();
+
+        return $token;
+    }
+
+    public function disableSharing(): void
+    {
+        $this->forceFill(['sharing_enabled' => false])->save();
     }
 
     protected static function booted(): void

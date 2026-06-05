@@ -14,6 +14,7 @@ class Hotel extends Model
         'hotel_identity_hash',
         'hotel_name',
         'hotel_slug',
+        'canonical_property_slug',
         'resort_name',
         'destination_name',
         'destination_country',
@@ -98,6 +99,23 @@ class Hotel extends Model
     public function providerSource(): BelongsTo
     {
         return $this->belongsTo(ProviderSource::class);
+    }
+
+    /**
+     * Canonical slug for /holidays/{slug}. Falls back to hotel_slug for legacy rows that
+     * have not yet been backfilled.
+     */
+    public function canonicalPropertySlugOrFallback(): string
+    {
+        $canonical = is_string($this->canonical_property_slug ?? null)
+            ? trim((string) $this->canonical_property_slug)
+            : '';
+        if ($canonical !== '') {
+            return $canonical;
+        }
+        $fallback = is_string($this->hotel_slug ?? null) ? trim((string) $this->hotel_slug) : '';
+
+        return $fallback !== '' ? $fallback : (string) $this->id;
     }
 
     public function holidayPackages(): HasMany

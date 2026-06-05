@@ -38,7 +38,54 @@ class ResultCardViewModel
         public readonly ?string $review,
         public readonly ?string $imageUrl,
         public readonly bool $isDisqualified,
+        public readonly ?string $departureAirport = null,
+        public readonly ?string $showcaseSlug = null,
+        public readonly ?string $canonicalPropertySlug = null,
     ) {}
+
+    /**
+     * @param  array<string, mixed>  $row  {@see \App\Support\DemoHolidaysCatalog}
+     */
+    public static function fromShowcase(array $row): self
+    {
+        $review = number_format((float) $row['review_score'], 1).'/5';
+        $review .= ' ('.number_format((int) $row['review_count']).' reviews)';
+        $reasons = array_values(array_filter(array_map('strval', $row['recommendation_reasons'] ?? [])));
+        $warnings = array_values(array_filter(array_map('strval', $row['warning_flags'] ?? [])));
+        $chips = array_slice($reasons, 0, 4);
+        if ($chips === []) {
+            $chips = array_slice(array_values(array_filter(array_map('strval', $row['family_features'] ?? []))), 0, 4);
+        }
+        $summary = trim((string) ($row['recommendation_summary'] ?? ''));
+        $highlights = array_slice($reasons, 0, 3);
+
+        return new self(
+            id: 0,
+            rank: null,
+            providerName: (string) $row['provider'],
+            hotelName: (string) $row['hotel_name'],
+            destinationName: (string) $row['destination'].', '.(string) $row['country'],
+            overallScore: (float) $row['overall_score'],
+            priceTotal: '£'.number_format((int) $row['price_total'], 0),
+            pricePerPerson: isset($row['price_per_person']) ? '£'.number_format((int) $row['price_per_person'], 0).' per person' : null,
+            nights: (int) $row['nights'].' nights',
+            flightOutbound: isset($row['flight_outbound_minutes']) ? self::minutesToText((int) $row['flight_outbound_minutes']) : null,
+            transfer: isset($row['transfer_minutes']) ? (int) $row['transfer_minutes'].' min transfer' : null,
+            boardType: BoardBasisDisplay::humanLabel((string) $row['board_type'], null),
+            providerUrl: (string) ($row['provider_url'] ?? ''),
+            recommendationSummary: $summary !== '' ? $summary : null,
+            recommendationBlurb: $summary !== '' ? $summary : 'We score each option across travel, value, family fit, location, and reviews so you can compare fairly at a glance.',
+            recommendationHighlights: $highlights,
+            reasons: $reasons,
+            warnings: $warnings,
+            featureChips: $chips,
+            review: $review,
+            imageUrl: null,
+            isDisqualified: (bool) ($row['is_disqualified'] ?? false),
+            departureAirport: (string) ($row['departure_airport'] ?? ''),
+            showcaseSlug: (string) $row['id'],
+        );
+    }
 
     public static function fromModel(ScoredHolidayOption $row): self
     {
@@ -87,6 +134,13 @@ class ResultCardViewModel
             $hotel,
         );
 
+        $airport = $package?->airport_code !== null && trim((string) $package->airport_code) !== ''
+            ? strtoupper(trim((string) $package->airport_code))
+            : null;
+
+        $canonicalSlug = $hotel?->canonicalPropertySlugOrFallback();
+        $canonicalSlug = is_string($canonicalSlug) && $canonicalSlug !== '' ? $canonicalSlug : null;
+
         return new self(
             id: $row->id,
             rank: $row->rank_position !== null ? (int) $row->rank_position : null,
@@ -112,6 +166,9 @@ class ResultCardViewModel
             review: $review,
             imageUrl: $hotel?->primaryImageUrlForDisplay(),
             isDisqualified: (bool) $row->is_disqualified,
+            departureAirport: $airport,
+            showcaseSlug: null,
+            canonicalPropertySlug: $canonicalSlug,
         );
     }
 

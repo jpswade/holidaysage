@@ -1,29 +1,15 @@
-<x-layouts.app-shell title="My Saved Searches - HolidaySage">
+<x-layouts.app-shell title="Saved searches - HolidaySage">
     <section>
         <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
-                <h1 class="text-4xl font-bold tracking-tight text-slate-900">My Saved Searches</h1>
-                <p class="mt-2 text-lg text-slate-600">Your holiday searches are being tracked and ranked continuously</p>
+                <h1 class="text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">Saved searches</h1>
+                <p class="mt-2 text-base text-slate-600">A calm record of the searches you care about. Open any one to see its latest matches.</p>
             </div>
             <a href="{{ route('searches.create') }}" class="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-700">
                 <x-lucide-plus class="h-4 w-4" />
-                New Search
+                Create a saved search
             </a>
         </div>
-
-        <article class="mt-8 rounded-2xl border border-teal-200 bg-teal-50/40 p-5">
-            <div class="flex gap-3">
-                <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-700">
-                    <x-lucide-star class="h-5 w-5" />
-                </span>
-                <div>
-                    <h2 class="text-xl font-semibold text-slate-900">How HolidaySage works</h2>
-                    <p class="mt-1 text-base leading-relaxed text-slate-600">
-                        Each search continuously monitors Jet2 and TUI for the best matching holidays. We rank options based on your preferences, price trends, and availability. Results improve over time as we learn and find better deals.
-                    </p>
-                </div>
-            </div>
-        </article>
 
         @if ($searches->isEmpty())
             <div class="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
@@ -85,30 +71,14 @@
                             <p class="text-lg text-slate-600">options found</p>
                         </div>
 
-                        <a href="{{ route('holidays.index', ['search_id' => $search->id]) }}" class="mt-4 inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">View holidays</a>
+                        <div class="mt-4 flex flex-wrap items-center gap-2">
+                            <a href="{{ route('saved-searches.show', $search) }}" class="inline-flex rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700">Open saved search</a>
+                            <a href="{{ route('holidays.index', ['search_id' => $search->id]) }}" class="inline-flex rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">Browse all results</a>
+                        </div>
                     </article>
                 @endforeach
             </div>
 
-            <section class="mt-12 border-t border-slate-200 pt-8">
-                <div class="grid gap-4 md:grid-cols-3">
-                    <article class="rounded-2xl bg-white p-5 shadow-sm">
-                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><x-lucide-refresh-cw class="h-5 w-5" /></span>
-                        <h3 class="mt-3 text-lg font-semibold text-slate-900">Check regularly</h3>
-                        <p class="mt-1 text-sm text-slate-600">Results update frequently. New deals appear as availability changes.</p>
-                    </article>
-                    <article class="rounded-2xl bg-white p-5 shadow-sm">
-                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><x-lucide-bell class="h-5 w-5" /></span>
-                        <h3 class="mt-3 text-lg font-semibold text-slate-900">Enable alerts</h3>
-                        <p class="mt-1 text-sm text-slate-600">Get notified when prices drop or highly-rated options become available.</p>
-                    </article>
-                    <article class="rounded-2xl bg-white p-5 shadow-sm">
-                        <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><x-lucide-shield-check class="h-5 w-5" /></span>
-                        <h3 class="mt-3 text-lg font-semibold text-slate-900">Trust the score</h3>
-                        <p class="mt-1 text-sm text-slate-600">Our AI ranks options by how well they match your exact preferences.</p>
-                    </article>
-                </div>
-            </section>
         @endif
     </section>
 </x-layouts.app-shell>

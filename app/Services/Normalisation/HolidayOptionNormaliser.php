@@ -43,6 +43,15 @@ class HolidayOptionNormaliser
             $hotelData['first_seen_at'] = $now;
         }
         $hotelData['last_seen_at'] = $now;
+
+        // Assign or reuse a canonical_property_slug so the same real-world property is
+        // represented by one slug across providers. Match rule: same hotel_slug AND
+        // the same destination_name + destination_country (case-insensitive), checked
+        // against pre-existing rows from any provider.
+        if (empty($hotelData['canonical_property_slug'])) {
+            $hotelData['canonical_property_slug'] = $this->resolveCanonicalPropertySlug($hotelData, $hotel);
+        }
+
         $hotelFill = array_intersect_key(
             $hotelData,
             array_flip((new Hotel)->getFillable())
@@ -99,6 +108,48 @@ class HolidayOptionNormaliser
     }
 
     /**
+     * Resolve the canonical_property_slug for an incoming hotel record so the same
+     * real-world property is shared across providers. Falls back to the row's hotel_slug.
+     *
+     * @param  array<string, mixed>  $hotelData
+     */
+    private function resolveCanonicalPropertySlug(array $hotelData, ?Hotel $existing): string
+    {
+        if ($existing !== null && is_string($existing->canonical_property_slug) && trim((string) $existing->canonical_property_slug) !== '') {
+            return (string) $existing->canonical_property_slug;
+        }
+
+        $hotelSlug = trim((string) ($hotelData['hotel_slug'] ?? ''));
+        if ($hotelSlug === '') {
+            $hotelSlug = Str::slug((string) ($hotelData['hotel_name'] ?? 'hotel'));
+        }
+        if ($hotelSlug === '') {
+            $hotelSlug = 'hotel-'.Str::random(8);
+        }
+
+        $destination = strtolower(trim((string) ($hotelData['destination_name'] ?? '')));
+        $country = strtolower(trim((string) ($hotelData['destination_country'] ?? '')));
+
+        $match = Hotel::query()
+            ->whereRaw('LOWER(hotel_slug) = ?', [strtolower($hotelSlug)])
+            ->whereNotNull('canonical_property_slug')
+            ->when($destination !== '', function ($q) use ($destination): void {
+                $q->whereRaw('LOWER(destination_name) = ?', [$destination]);
+            })
+            ->when($country !== '', function ($q) use ($country): void {
+                $q->whereRaw('LOWER(COALESCE(destination_country, "")) = ?', [$country]);
+            })
+            ->orderBy('id')
+            ->first();
+
+        if ($match !== null) {
+            return (string) $match->canonical_property_slug;
+        }
+
+        return $hotelSlug;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     private function buildPackageSignature(ProviderSource $provider, Hotel $hotel, array $data): string
@@ -148,6 +199,7 @@ class HolidayOptionNormaliser
             'provider_hotel_id',
             'hotel_name',
             'hotel_slug',
+            'canonical_property_slug',
             'resort_name',
             'destination_name',
             'destination_country',

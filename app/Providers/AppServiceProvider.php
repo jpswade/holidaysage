@@ -3,10 +3,16 @@
 namespace App\Providers;
 
 use App\Contracts\HolidayScorer;
+use App\Listeners\MergePendingShortlistOnLogin;
+use App\Models\HolidayShortlist;
+use App\Policies\HolidayShortlistPolicy;
 use App\Services\ProviderImport\Jet2SmartSearchHttpClient;
 use App\Services\Scoring\DefaultHolidayScorer;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
@@ -36,6 +42,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Paginator::useTailwind();
+
+        Gate::policy(HolidayShortlist::class, HolidayShortlistPolicy::class);
+
+        Event::listen(Login::class, MergePendingShortlistOnLogin::class);
 
         if (filter_var(env('TRUSTED_PROXY_ALL', false), FILTER_VALIDATE_BOOL)) {
             Request::setTrustedProxies(

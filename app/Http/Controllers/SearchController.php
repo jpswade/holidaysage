@@ -14,7 +14,6 @@ use App\Services\Imports\ImportUrlParserRegistry;
 use App\Services\Providers\ProviderSourceResolver;
 use App\Support\SavedHolidaySearchDisplayName;
 use App\Support\SearchFormPrefill;
-use App\ViewModels\ResultCardViewModel;
 use App\ViewModels\SearchSummaryViewModel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -138,22 +137,18 @@ class SearchController extends Controller
         return redirect()->route('holidays.index', $params);
     }
 
-    public function deal(SavedHolidaySearch $search, ScoredHolidayOption $scoredOption): View
+    public function deal(SavedHolidaySearch $search, ScoredHolidayOption $scoredOption): RedirectResponse
     {
         abort_unless($scoredOption->saved_holiday_search_id === $search->id, 404);
 
-        $scoredOption->load(['holidayPackage.hotel.photos', 'holidayPackage.providerSource']);
-        $card = ResultCardViewModel::fromModel($scoredOption);
-        $package = $scoredOption->holidayPackage;
-        $provider = $package?->providerSource;
-        $providerUrl = $this->absoluteProviderUrl($package?->provider_url, $provider?->base_url);
+        $scoredOption->load(['holidayPackage.hotel']);
+        $hotel = $scoredOption->holidayPackage?->hotel;
+        abort_if($hotel === null, 404);
 
-        return view('searches.deal', [
-            'search' => $search,
-            'summary' => SearchSummaryViewModel::fromModel($search),
-            'card' => $card,
-            'providerUrl' => $providerUrl,
-        ]);
+        return redirect()->route('holidays.show', [
+            'slug' => $hotel->canonicalPropertySlugOrFallback(),
+            'p' => $scoredOption->id,
+        ], 301);
     }
 
     public function results(SavedHolidaySearch $search): RedirectResponse
@@ -249,30 +244,28 @@ class SearchController extends Controller
             $q['q'] = (string) $request->query('q');
         }
         $sort = (string) $request->query('sort', 'rank');
-        if ($sort !== 'rank' && in_array($sort, ['price_low', 'price_high', 'score'], true)) {
+        if ($sort !== 'rank' && in_array($sort, \App\Support\ScoredHolidayResultsFilter::SORTS, true)) {
             $q['sort'] = $sort;
         }
         if ($request->boolean('qualified')) {
             $q['qualified'] = 1;
         }
 
+        foreach ((array) $request->query('provider', []) as $providerKey) {
+            if (is_scalar($providerKey) && trim((string) $providerKey) !== '') {
+                $q['provider'][] = strtolower((string) $providerKey);
+            }
+        }
+        foreach ((array) $request->query('board', []) as $boardKey) {
+            if (is_scalar($boardKey) && trim((string) $boardKey) !== '') {
+                $q['board'][] = strtolower((string) $boardKey);
+            }
+        }
+        if (is_numeric($request->query('max_transfer'))) {
+            $q['max_transfer'] = (int) $request->query('max_transfer');
+        }
+
         return $q;
     }
 
-    private function absoluteProviderUrl(?string $providerUrl, ?string $baseUrl): ?string
-    {
-        if (! is_string($providerUrl) || $providerUrl === '') {
-            return null;
-        }
-
-        if (str_starts_with($providerUrl, 'http://') || str_starts_with($providerUrl, 'https://')) {
-            return $providerUrl;
-        }
-
-        if (! is_string($baseUrl) || $baseUrl === '') {
-            return $providerUrl;
-        }
-
-        return rtrim($baseUrl, '/').'/'.ltrim($providerUrl, '/');
-    }
 }

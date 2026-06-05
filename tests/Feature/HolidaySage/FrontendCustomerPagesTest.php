@@ -28,9 +28,13 @@ class FrontendCustomerPagesTest extends TestCase
         $response = $this->get(route('home'));
 
         $response->assertOk();
-        $response->assertSeeText('Find your perfect');
-        $response->assertSeeText('holiday, effortlessly');
+        $response->assertSeeText('Find better holidays without comparing the same sites for hours');
+        $response->assertSeeText('Best family holidays');
+        $response->assertSeeText('Short transfer escapes');
+        $response->assertSeeText('Best value this week');
+        $response->assertSeeText('All-inclusive picks');
         $response->assertSeeText('Browse holidays');
+        $response->assertSeeText('Create a saved search');
         $response->assertSee(route('holidays.index'));
         $response->assertSee(route('searches.create'));
         $response->assertSee(route('searches.index'));
@@ -73,13 +77,14 @@ class FrontendCustomerPagesTest extends TestCase
     {
         $this->seedScoredSearch();
         $option = ScoredHolidayOption::query()->orderBy('id')->firstOrFail();
+        $hotel = Hotel::query()->orderBy('id')->firstOrFail();
         $response = $this->get(route('holidays.index'));
         $response->assertOk();
         $response->assertSee('1 option', false);
         $response->assertSee('Sunrise Family Resort', false);
-        $response->assertSee(route('searches.deals.show', [
-            'search' => $option->saved_holiday_search_id,
-            'scoredOption' => $option->id,
+        $response->assertSee(route('holidays.show', [
+            'slug' => $hotel->canonical_property_slug ?? $hotel->hotel_slug,
+            'p' => $option->id,
         ]), false);
     }
 

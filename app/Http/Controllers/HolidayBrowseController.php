@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ProviderSourceStatus;
+use App\Models\ProviderSource;
 use App\Models\SavedHolidaySearch;
 use App\Services\BrowseHolidaysQuery;
 use App\Support\ScoredHolidayResultsFilter;
@@ -17,8 +19,7 @@ class HolidayBrowseController extends Controller
     public function index(Request $request, BrowseHolidaysQuery $browseHolidays): View
     {
         $resultsSort = $this->scoredHolidayResultsFilter->normaliseSort((string) $request->query('sort', 'rank'));
-        $resultsQuery = trim((string) $request->query('q', ''));
-        $resultsQualifiedOnly = $request->boolean('qualified');
+        $filters = $this->scoredHolidayResultsFilter->normaliseFilters($request);
 
         $searchScope = $this->searchScopeFromRequest($request);
         $holidaysTotal = $browseHolidays->totalUnfilteredCount($searchScope);
@@ -28,8 +29,12 @@ class HolidayBrowseController extends Controller
             'results' => $results,
             'holidaysTotal' => $holidaysTotal,
             'resultsSort' => $resultsSort,
-            'resultsQuery' => $resultsQuery,
-            'resultsQualifiedOnly' => $resultsQualifiedOnly,
+            'resultsQuery' => $filters['q'],
+            'resultsQualifiedOnly' => $filters['qualified'],
+            'resultsProviders' => $filters['providers'],
+            'resultsBoards' => $filters['boards'],
+            'resultsMaxTransfer' => $filters['max_transfer'],
+            'availableProviders' => $this->availableProviders(),
             'scopedSearch' => $searchScope,
         ]);
     }
@@ -46,5 +51,17 @@ class HolidayBrowseController extends Controller
         abort_if($search === null, 404);
 
         return $search;
+    }
+
+    /**
+     * @return array<string, string> Map of provider key → display name (active providers only).
+     */
+    private function availableProviders(): array
+    {
+        return ProviderSource::query()
+            ->where('status', ProviderSourceStatus::Active)
+            ->orderBy('name')
+            ->pluck('name', 'key')
+            ->all();
     }
 }
