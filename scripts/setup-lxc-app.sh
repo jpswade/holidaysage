@@ -28,9 +28,7 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq ca-certificates curl gnupg
-if [ ! -f /etc/apt/sources.list.d/nodesource.list ]; then
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-fi
+bash "$(dirname "${BASH_SOURCE[0]}")/ensure-nodejs.sh"
 
 echo "=== Packages (nginx, PHP, MariaDB, Redis) ==="
 apt-get install -y -qq nginx \

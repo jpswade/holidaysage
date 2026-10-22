@@ -92,8 +92,9 @@ ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "mkdir -p $APP_BASE"
 if ! ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "command -v git" &>/dev/null; then
   ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git"
 fi
-if [ -f package.json ] && ! ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "command -v npm" &>/dev/null; then
-  ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl gnupg && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs"
+if [ -f package.json ]; then
+  echo "=== Checking patched Node.js for asset builds ==="
+  ssh "${SSH_OPTS[@]}" "$SSH_TARGET" 'bash -s' < "$SCRIPT_DIR/ensure-nodejs.sh"
 fi
 
 if [ -d .git ]; then
